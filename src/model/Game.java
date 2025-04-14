@@ -1,4 +1,7 @@
+package model;
+
 import javax.swing.*;
+import view.*;
 
 public class Game implements Runnable {
     public void run() {

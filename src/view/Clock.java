@@ -1,3 +1,5 @@
+package view;
+
 public class Clock {
     private int hh;
     private int mm;
