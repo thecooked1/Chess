@@ -1,187 +1,72 @@
 package model;
 
-import java.awt.Graphics;
-import java.awt.Image;
-import java.awt.image.BufferedImage;
-import java.io.IOException;
-import java.util.LinkedList;
 import java.util.List;
-
-import javax.imageio.ImageIO;
+import java.util.Objects;
 
 public abstract class Piece {
-    private final int color;
-    private Square currentSquare;
-    private BufferedImage img;
-    
-    public Piece(int color, Square initSq, String img_file) {
+    protected final PlayerColor color;
+
+    public Piece(PlayerColor color) {
         this.color = color;
-        this.currentSquare = initSq;
-        
-        try {
-            if (this.img == null) {
-              this.img = ImageIO.read(getClass().getResource(img_file));
-            }
-          } catch (IOException e) {
-            System.out.println("File not found: " + e.getMessage());
-          }
     }
-    
-    public boolean move(Square fin) {
-        Piece occup = fin.getOccupyingPiece();
-        
-        if (occup != null) {
-            if (occup.getColor() == this.color) return false;
-            else fin.capture(this);
-        }
-        
-        currentSquare.removePiece();
-        this.currentSquare = fin;
-        currentSquare.put(this);
-        return true;
-    }
-    
-    public Square getPosition() {
-        return currentSquare;
-    }
-    
-    public void setPosition(Square sq) {
-        this.currentSquare = sq;
-    }
-    
-    public int getColor() {
+
+    public PlayerColor getColor() {
         return color;
     }
-    
-    public Image getImage() {
-        return img;
-    }
-    
-    public void draw(Graphics g) {
-        int x = currentSquare.getX();
-        int y = currentSquare.getY();
-        
-        g.drawImage(this.img, x, y, null);
-    }
-    
-    public int[] getLinearOccupations(Square[][] board, int x, int y) {
-        int lastYabove = 0;
-        int lastXright = 7;
-        int lastYbelow = 7;
-        int lastXleft = 0;
-        
-        for (int i = 0; i < y; i++) {
-            if (board[i][x].isOccupied()) {
-                if (board[i][x].getOccupyingPiece().getColor() != this.color) {
-                    lastYabove = i;
-                } else lastYabove = i + 1;
-            }
-        }
 
-        for (int i = 7; i > y; i--) {
-            if (board[i][x].isOccupied()) {
-                if (board[i][x].getOccupyingPiece().getColor() != this.color) {
-                    lastYbelow = i;
-                } else lastYbelow = i - 1;
-            }
-        }
+    public abstract PieceType getType();
 
-        for (int i = 0; i < x; i++) {
-            if (board[y][i].isOccupied()) {
-                if (board[y][i].getOccupyingPiece().getColor() != this.color) {
-                    lastXleft = i;
-                } else lastXleft = i + 1;
-            }
-        }
+    /**
+     * Generates a list of pseudo-legal moves for this piece.
+     * Pseudo-legal means moves that are valid according to the piece's movement rules,
+     * ignoring whether the move would leave the king in check.
+     *
+     * @param board The current board state.
+     * @param currentPos The current position of this piece.
+     * @return A list of target Positions the piece could potentially move to.
+     */
+    public abstract List<Position> getPseudoLegalMoves(BoardModel board, Position currentPos);
 
-        for (int i = 7; i > x; i--) {
-            if (board[y][i].isOccupied()) {
-                if (board[y][i].getOccupyingPiece().getColor() != this.color) {
-                    lastXright = i;
-                } else lastXright = i - 1;
+    // Helper method for linear moves (Rook, Queen)
+    protected void addLinearMoves(BoardModel board, Position currentPos, List<Position> moves, int dRow, int dCol) {
+        int r = currentPos.getRow() + dRow;
+        int c = currentPos.getCol() + dCol;
+        while (Position.isValid(r, c)) {
+            Piece targetPiece = board.getPieceAt(new Position(r, c));
+            if (targetPiece == null) {
+                moves.add(new Position(r, c)); // Empty square
+            } else {
+                if (targetPiece.getColor() != this.color) {
+                    moves.add(new Position(r, c)); // Capture opponent
+                }
+                break; // Blocked by own or opponent piece
             }
+            r += dRow;
+            c += dCol;
         }
-        
-        int[] occups = {lastYabove, lastYbelow, lastXleft, lastXright};
-        
-        return occups;
     }
-    
-    public List<Square> getDiagonalOccupations(Square[][] board, int x, int y) {
-        LinkedList<Square> diagOccup = new LinkedList<Square>();
-        
-        int xNW = x - 1;
-        int xSW = x - 1;
-        int xNE = x + 1;
-        int xSE = x + 1;
-        int yNW = y - 1;
-        int ySW = y + 1;
-        int yNE = y - 1;
-        int ySE = y + 1;
-        
-        while (xNW >= 0 && yNW >= 0) {
-            if (board[yNW][xNW].isOccupied()) {
-                if (board[yNW][xNW].getOccupyingPiece().getColor() == this.color) {
-                    break;
-                } else {
-                    diagOccup.add(board[yNW][xNW]);
-                    break;
-                }
-            } else {
-                diagOccup.add(board[yNW][xNW]);
-                yNW--;
-                xNW--;
-            }
-        }
-        
-        while (xSW >= 0 && ySW < 8) {
-            if (board[ySW][xSW].isOccupied()) {
-                if (board[ySW][xSW].getOccupyingPiece().getColor() == this.color) {
-                    break;
-                } else {
-                    diagOccup.add(board[ySW][xSW]);
-                    break;
-                }
-            } else {
-                diagOccup.add(board[ySW][xSW]);
-                ySW++;
-                xSW--;
-            }
-        }
-        
-        while (xSE < 8 && ySE < 8) {
-            if (board[ySE][xSE].isOccupied()) {
-                if (board[ySE][xSE].getOccupyingPiece().getColor() == this.color) {
-                    break;
-                } else {
-                    diagOccup.add(board[ySE][xSE]);
-                    break;
-                }
-            } else {
-                diagOccup.add(board[ySE][xSE]);
-                ySE++;
-                xSE++;
-            }
-        }
-        
-        while (xNE < 8 && yNE >= 0) {
-            if (board[yNE][xNE].isOccupied()) {
-                if (board[yNE][xNE].getOccupyingPiece().getColor() == this.color) {
-                    break;
-                } else {
-                    diagOccup.add(board[yNE][xNE]);
-                    break;
-                }
-            } else {
-                diagOccup.add(board[yNE][xNE]);
-                yNE--;
-                xNE++;
-            }
-        }
-        
-        return diagOccup;
+
+    // Helper method for diagonal moves (Bishop, Queen)
+    protected void addDiagonalMoves(BoardModel board, Position currentPos, List<Position> moves, int dRow, int dCol) {
+        addLinearMoves(board, currentPos, moves, dRow, dCol); // Same logic as linear but different directions passed in
     }
-    
-    // No implementation, to be implemented by each subclass
-    public abstract List<Square> getLegalMoves(Board b);
+
+    @Override
+    public boolean equals(Object o) {
+        // Basic equality based on type and color - useful for lists but not unique identity
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Piece piece = (Piece) o;
+        return color == piece.color && getType() == piece.getType(); // Comparing type is essential
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(color, getType());
+    }
+
+    @Override
+    public String toString() {
+        return color + " " + getType();
+    }
 }
