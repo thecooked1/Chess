@@ -1,31 +1,19 @@
 package model.piece;
 
-import model.*;
-import java.util.LinkedList;
 import java.util.List;
+import model.*;
 
 public class Queen extends Piece {
 
-    public Queen(PlayerColor color) {
-        super(color);
+    public Queen(PieceColor color, Square initSq, String img_file) {
+        super(color, PieceType.QUEEN, initSq, img_file);
     }
 
     @Override
-    public PieceType getType() {
-        return PieceType.QUEEN;
-    }
-
-    @Override
-    public List<Position> getPseudoLegalMoves(BoardModel board, Position currentPos) {
-        List<Position> moves = new LinkedList<>();
-        // Combine Rook and Bishop moves
-        int[] dRows = { -1, 1, 0, 0, -1, -1, 1, 1 }; // Linear + Diagonal
-        int[] dCols = { 0, 0, -1, 1, -1, 1, -1, 1 };
-
-        for (int i = 0; i < 8; i++) {
-            // Using addLinearMoves, as diagonal is the same logic
-            addLinearMoves(board, currentPos, moves, dRows[i], dCols[i]);
-        }
+    public List<Square> getPotentialMoves(Board board) {
+        // Queen moves linearly and diagonally
+        List<Square> moves = getPotentialLinearMoves(board);
+        moves.addAll(getPotentialDiagonalMoves(board));
         return moves;
     }
 }

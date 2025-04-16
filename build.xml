@@ -6,17 +6,58 @@
     <property name="dir.buildfile" value="."/>
     <property name="dir.workspace" value="${dir.buildfile}/.."/>
     <property name="dir.jarfile" value="${dir.buildfile}"/>
-    <target name="create_run_jar">
+
+    <!-- Target to clean the build directory -->
+    <target name="clean">
+        <delete dir="${dir.jarfile}/bin"/>
+        <delete file="${dir.jarfile}/chess-java.jar"/>
+        <echo>Cleaned bin directory and output JAR.</echo>
+    </target>
+
+    <!-- Target to compile the source code -->
+    <!-- NOTE: Assumes source files are in 'src' and resources in 'resources' -->
+    <target name="compile">
+        <mkdir dir="${dir.jarfile}/bin"/>
+        <javac srcdir="${dir.buildfile}/src"
+               destdir="${dir.jarfile}/bin"
+               classpath="jar-in-jar-loader.zip"
+               includeantruntime="false"
+               debug="true" debuglevel="lines,vars,source">
+            <compilerarg value="-Xlint:all"/>
+        </javac>
+        <!-- Copy resources to the bin directory so they are found alongside classes -->
+        <copy todir="${dir.jarfile}/bin">
+            <fileset dir="${dir.buildfile}/resources"/>
+        </copy>
+        <echo>Compilation complete. Class files in 'bin'. Resources copied to 'bin'.</echo>
+    </target>
+
+
+    <!-- Target to create the runnable JAR -->
+    <!-- NOTE: This target now DEPENDS on the 'compile' target -->
+    <target name="create_run_jar" depends="compile">
         <jar destfile="${dir.jarfile}/chess-java.jar">
             <manifest>
                 <attribute name="Main-Class" value="org.eclipse.jdt.internal.jarinjarloader.JarRsrcLoader"/>
+                <!-- *** CORRECTED Main Class *** -->
                 <attribute name="Rsrc-Main-Class" value="Game"/>
                 <attribute name="Class-Path" value="."/>
+                <!-- The loader finds resources/classes from the root inside the JAR -->
                 <attribute name="Rsrc-Class-Path" value="./"/>
             </manifest>
             <zipfileset src="jar-in-jar-loader.zip"/>
+            <!-- Include everything from the bin directory (compiled classes AND copied resources) -->
             <fileset dir="${dir.jarfile}/bin"/>
-            <fileset dir="${dir.jarfile}/resources"/>
+            <!-- No longer need the separate resources fileset here, as they are copied to bin -->
+            <!-- <fileset dir="${dir.jarfile}/resources"/> -->
         </jar>
+        <echo>Runnable JAR 'chess-java.jar' created.</echo>
     </target>
+
+    <!-- Default target can still be create_run_jar -->
+    <!-- Or add a 'run' target -->
+    <target name="run" depends="create_run_jar">
+        <java jar="${dir.jarfile}/chess-java.jar" fork="true"/>
+    </target>
+
 </project>

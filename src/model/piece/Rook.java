@@ -1,33 +1,36 @@
 package model.piece;
 
-import model.*;
-import java.util.LinkedList;
 import java.util.List;
+import model.*;
 
 public class Rook extends Piece {
-    private boolean hasMoved = false;
+    private boolean hasMoved;
 
-    public Rook(PlayerColor color) {
-        super(color);
-    }
-
-    @Override
-    public PieceType getType() {
-        return PieceType.ROOK;
-    }
-
-    public boolean hasMoved() { return hasMoved; }
-    public void setHasMoved(boolean hasMoved) { this.hasMoved = hasMoved; }
-
-    @Override
-    public List<Position> getPseudoLegalMoves(BoardModel board, Position currentPos) {
-        List<Position> moves = new LinkedList<>();
-        int[] dRows = { -1, 1, 0, 0 }; // Up, Down, Left, Right
-        int[] dCols = { 0, 0, -1, 1 };
-
-        for (int i = 0; i < 4; i++) {
-            addLinearMoves(board, currentPos, moves, dRows[i], dCols[i]);
+    public Rook(PieceColor color, Square initSq, String img_file) {
+        super(color, PieceType.ROOK, initSq, img_file);
+        this.hasMoved = false; // Assume starts unmoved, GameLogic updates
+        // Determine initial hasMoved status based on starting position
+        if (color == PieceColor.WHITE && initSq.getRank() == 0 && (initSq.getFile() == 0 || initSq.getFile() == 7)) {
+            this.hasMoved = false;
+        } else if (color == PieceColor.BLACK && initSq.getRank() == 7 && (initSq.getFile() == 0 || initSq.getFile() == 7)) {
+            this.hasMoved = false;
+        } else {
+            this.hasMoved = true; // If not in a standard starting pos, assume moved
         }
-        return moves;
+    }
+
+    public void setHasMoved() {
+        this.hasMoved = true;
+    }
+
+    public boolean hasMoved() {
+        return this.hasMoved;
+    }
+
+
+    @Override
+    public List<Square> getPotentialMoves(Board board) {
+        // Rooks move linearly (ranks and files)
+        return getPotentialLinearMoves(board);
     }
 }

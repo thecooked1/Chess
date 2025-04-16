@@ -1,38 +1,35 @@
 package model.piece;
 
-import model.*;
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
+import model.*;
 
 public class Knight extends Piece {
 
-    public Knight(PlayerColor color) {
-        super(color);
+    public Knight(PieceColor color, Square initSq, String img_file) {
+        super(color, PieceType.KNIGHT, initSq, img_file);
     }
 
     @Override
-    public PieceType getType() {
-        return PieceType.KNIGHT;
-    }
+    public List<Square> getPotentialMoves(Board board) {
+        List<Square> moves = new ArrayList<>();
+        Square[][] grid = board.getSquareGrid();
+        int currentFile = getPosition().getFile();
+        int currentRank = getPosition().getRank();
 
-    @Override
-    public List<Position> getPseudoLegalMoves(BoardModel board, Position currentPos) {
-        List<Position> moves = new LinkedList<>();
-        int r = currentPos.getRow();
-        int c = currentPos.getCol();
-
-        int[] dr = { -2, -2, -1, -1, 1, 1, 2, 2 }; // Possible row changes
-        int[] dc = { -1, 1, -2, 2, -2, 2, -1, 1 }; // Possible col changes
+        // Possible L-shaped moves (delta file, delta rank)
+        int[] fileOffsets = { 1, 1, 2, 2, -1, -1, -2, -2 };
+        int[] rankOffsets = { 2, -2, 1, -1, 2, -2, 1, -1 };
 
         for (int i = 0; i < 8; i++) {
-            int targetRow = r + dr[i];
-            int targetCol = c + dc[i];
+            int targetFile = currentFile + fileOffsets[i];
+            int targetRank = currentRank + rankOffsets[i];
 
-            if (Position.isValid(targetRow, targetCol)) {
-                Position targetPos = new Position(targetRow, targetCol);
-                Piece targetPiece = board.getPieceAt(targetPos);
-                if (targetPiece == null || targetPiece.getColor() != this.color) {
-                    moves.add(targetPos);
+            if (Board.isValidCoordinate(targetFile, targetRank)) {
+                Square targetSquare = grid[targetFile][targetRank];
+                if (!targetSquare.isOccupied() || targetSquare.getOccupyingPiece().getColor() != getColor()) {
+                    // Can move to empty square or capture opponent's piece
+                    moves.add(targetSquare);
                 }
             }
         }

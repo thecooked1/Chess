@@ -1,242 +1,167 @@
 package controller;
 
 import model.*;
-import view.*;
+import view.ChessView;
 
-import javax.swing.JOptionPane;
-import javax.swing.SwingUtilities;
-import javax.swing.Timer;
+import javax.swing.Timer; // Use Swing Timer for GUI updates
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.List;
-import java.util.Observable;
-import java.util.Observer;
 
-@SuppressWarnings("deprecation") // For Observer
-public class GameController implements Observer, ActionListener {
+public class GameController {
 
-    private ChessGame model;
-    private IGameView view; // Use interface for decoupling if needed elsewhere
-    private Timer gameTimer;
+    private final GameLogic gameLogic; // Model Logic
+    private final ChessView chessView; // View
+    private Timer gameTimer; // Timer for player clocks
 
-    private Position selectedPiecePosition = null; // Track selected piece
-
-    public GameController(ChessGame model) {
-        this.model = model;
-        this.model.addObserver(this); // Register controller as observer of model
-
-        // Timer setup (interval 1000ms = 1 second)
-        gameTimer = new Timer(1000, this);
-        gameTimer.setInitialDelay(0);
+    public GameController(GameLogic logic, ChessView view) {
+        this.gameLogic = logic;
+        this.chessView = view;
+        initializeTimer();
     }
 
-    // Called by Main or Start Menu to link the View
-    public void setView(IGameView view) {
-        this.view = view;
-    }
-
-    // --- Game Lifecycle ---
-
-    public void startApplication() {
-        // Launch the Start Menu
-        SwingUtilities.invokeLater(() -> {
-            StartMenuFrame startMenu = new StartMenuFrame(this); // Pass controller ref
-            startMenu.run(); // Build and show UI
-        });
-    }
-
-    // Called from StartMenuFrame
-    public void initializeNewGame(String whiteName, String blackName, int hh, int mm, int ss) {
-        // Ensure view exists (it should be created now or before)
-        if (view == null) {
-            view = new GameFrame(this, whiteName, blackName); // Create the Game Frame
-        }
-        // Configure the model
-        model.startGame(hh, mm, ss);
-
-        // Make the GameFrame visible
-        ((GameFrame)view).setVisible(true);
-
-        // Start the timer if the game is timed
-        if (model.isClockTimed()) {
-            gameTimer.start();
-        } else {
-            gameTimer.stop(); // Ensure stopped for untimed games
-        }
-        // Initial status message
-        updateStatusMessage();
-        view.updateClock(PlayerColor.WHITE, model.getClockTime(PlayerColor.WHITE));
-        view.updateClock(PlayerColor.BLACK, model.getClockTime(PlayerColor.BLACK));
-        view.initializeBoard(model.getBoardModel().getBoardArray()); // Initial board draw
-    }
-
-    // --- Input Handling (from View) ---
-
-    public void handleSquareClick(Position clickedPos) {
-        if (model.getGameStatus() != GameStatus.ONGOING && model.getGameStatus() != GameStatus.CHECK) {
-            view.clearHighlights(); // Clear highlights if game is over
-            return;
-        }
-
-        Piece clickedPiece = model.getBoardModel().getPieceAt(clickedPos);
-
-        if (selectedPiecePosition == null) {
-            // 1. First click: Select a piece
-            if (clickedPiece != null && clickedPiece.getColor() == model.getCurrentTurn()) {
-                selectedPiecePosition = clickedPos;
-                List<Move> legalMoves = model.getLegalMovesForPieceAt(selectedPiecePosition);
-                List<Position> legalTargets = legalMoves.stream().map(Move::getEnd).collect(java.util.stream.Collectors.toList());
-
-                view.clearHighlights(); // Clear previous
-                view.highlightSquare(selectedPiecePosition, null); // Highlight selection (color handled by view)
-                view.highlightLegalMoves(legalTargets); // Highlight possible moves
-            } else {
-                // Clicked empty square or opponent's piece initially
-                view.clearHighlights();
-                selectedPiecePosition = null;
-            }
-        } else {
-            // 2. Second click: Attempt to move or deselect
-            if (clickedPos.equals(selectedPiecePosition)) {
-                // Clicked same square again: Deselect
-                selectedPiecePosition = null;
-                view.clearHighlights();
-            } else {
-                // Attempt the move
-                boolean moveMade = model.makeMove(selectedPiecePosition, clickedPos);
-                if (moveMade) {
-                    // Successful move - model will notify observer (this controller)
-                    // which will update the view. Clear selection state here.
-                    selectedPiecePosition = null;
-                    view.clearHighlights();
-                    // Timer continues, status updates via observer
-                } else {
-                    // Illegal move attempt or clicked non-target square.
-                    // Option 1: Deselect current piece
-                    // selectedPiecePosition = null;
-                    // view.clearHighlights();
-
-                    // Option 2: Check if clicked another friendly piece to switch selection
-                    if (clickedPiece != null && clickedPiece.getColor() == model.getCurrentTurn()) {
-                        selectedPiecePosition = clickedPos; // Switch selection
-                        List<Move> legalMoves = model.getLegalMovesForPieceAt(selectedPiecePosition);
-                        List<Position> legalTargets = legalMoves.stream().map(Move::getEnd).collect(java.util.stream.Collectors.toList());
-                        view.clearHighlights();
-                        view.highlightSquare(selectedPiecePosition, null);
-                        view.highlightLegalMoves(legalTargets);
-                    } else {
-                        // Clicked empty or opponent's piece - treat as deselect
-                        selectedPiecePosition = null;
-                        view.clearHighlights();
-                    }
-                }
-            }
-        }
-    }
-
-
-    public void requestNewGame() {
-        int choice = JOptionPane.showConfirmDialog(
-                (GameFrame)view, // Requires view to be a JFrame or Component
-                "Start a new game? Current game will be lost.",
-                "New Game Confirmation",
-                JOptionPane.YES_NO_OPTION);
-
-        if (choice == JOptionPane.YES_OPTION) {
-            gameTimer.stop();
-            view.closeGameWindow(); // Close current game window
-            // Relaunch start menu
-            startApplication();
-        }
-    }
-
-    public void requestQuitGame() {
-        int choice = JOptionPane.showConfirmDialog(
-                (GameFrame)view,
-                "Are you sure you want to quit?",
-                "Quit Confirmation",
-                JOptionPane.YES_NO_OPTION);
-
-        if (choice == JOptionPane.YES_OPTION) {
-            gameTimer.stop();
-            view.closeGameWindow(); // Close game window
-            // Optionally: System.exit(0); // Exit application entirely
-        }
-    }
-
-
-    // --- Model Update Handling (Observer Pattern) ---
-
-    @Override
-    public void update(Observable o, Object arg) {
-        if (o instanceof ChessGame) {
-            // Ensure updates run on the EDT for Swing safety
-            SwingUtilities.invokeLater(() -> {
-                if (view == null) return; // View might not be ready yet
-
-                // Update board display
-                view.updateBoard(model.getBoardModel().getBoardArray());
-
-                // Update clocks (check if arg is PlayerColor for specific tick)
-                if (arg instanceof PlayerColor) {
-                    PlayerColor tickedPlayer = (PlayerColor) arg;
-                    view.updateClock(tickedPlayer, model.getClockTime(tickedPlayer));
-                } else { // General update, refresh both clocks
-                    view.updateClock(PlayerColor.WHITE, model.getClockTime(PlayerColor.WHITE));
-                    view.updateClock(PlayerColor.BLACK, model.getClockTime(PlayerColor.BLACK));
-                }
-
-
-                // Update status message
-                updateStatusMessage();
-
-                // Check for game over
-                GameStatus status = model.getGameStatus();
-                if (status != GameStatus.ONGOING && status != GameStatus.CHECK) {
+    private void initializeTimer() {
+        // Timer updates every second (1000 ms)
+        gameTimer = new Timer(1000, new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (gameLogic.getGameState().isGameOver()) {
                     gameTimer.stop();
-                    view.clearHighlights(); // Clear selection/moves on game end
-                    PlayerColor winner = null; // Determine winner based on status
-                    if (status == GameStatus.CHECKMATE_WHITE_WINS || status == GameStatus.WHITE_WINS_BY_TIMEOUT) {
-                        winner = PlayerColor.WHITE;
-                    } else if (status == GameStatus.CHECKMATE_BLACK_WINS || status == GameStatus.BLACK_WINS_BY_TIMEOUT) {
-                        winner = PlayerColor.BLACK;
-                    }
-                    view.showGameOver(status, winner);
+                    return;
                 }
-            });
+
+                GameState gameState = gameLogic.getGameState();
+                PieceColor currentPlayer = gameState.getCurrentPlayerTurn();
+                Clock currentClock = gameState.getClock(currentPlayer);
+
+                if (currentClock.isRunning()) {
+                    currentClock.decrementSecond();
+                    chessView.updateClocks(); // Update only clock display
+
+                    if (currentClock.isOutOfTime()) {
+                        gameTimer.stop();
+                        // Model determines game status based on time out
+                        // Set the status in the model
+                        GameState.GameStatus newStatus = (currentPlayer == PieceColor.WHITE)
+                                ? GameState.GameStatus.BLACK_WINS_TIME // White ran out, Black wins
+                                : GameState.GameStatus.WHITE_WINS_TIME; // Black ran out, White wins
+                        gameState.setGameStatus(newStatus);
+
+                        // Update the entire view to show game over message
+                        chessView.updateView();
+                    }
+                }
+            }
+        });
+
+        // Start timer only if game is timed
+        GameState gs = gameLogic.getGameState();
+        if (gs.getClock(PieceColor.WHITE).getTotalSeconds() > 0 ||
+                gs.getClock(PieceColor.BLACK).getTotalSeconds() > 0) {
+            // Start clock for White initially if timer exists
+            if (gs.getCurrentPlayerTurn() == PieceColor.WHITE && gs.getClock(PieceColor.WHITE).getTotalSeconds() > 0) {
+                gs.getClock(PieceColor.WHITE).start();
+            }
+            // Start the Swing timer
+            gameTimer.start();
         }
     }
 
-    // --- Timer Action Handling ---
-
-    @Override
-    public void actionPerformed(ActionEvent e) {
-        if (e.getSource() == gameTimer) {
-            // Timer ticked, tell the model to decrement the current player's clock
-            model.decrementClock(model.getCurrentTurn());
-            // The model.decrementClock() will notify observers if time runs out or just ticks
+    public void stopTimers() {
+        if (gameTimer != null && gameTimer.isRunning()) {
+            gameTimer.stop();
         }
+        // Also stop model clocks
+        gameLogic.getGameState().getClock(PieceColor.WHITE).stop();
+        gameLogic.getGameState().getClock(PieceColor.BLACK).stop();
     }
 
-    // --- Helper Methods ---
-    private void updateStatusMessage() {
-        GameStatus status = model.getGameStatus();
-        String message = "";
-        switch(status) {
-            case ONGOING:
-                message = model.getCurrentTurn() + "'s Turn";
-                break;
-            case CHECK: // If CHECK status is implemented in RuleEngine/ChessGame
-                message = model.getCurrentTurn() + "'s Turn (Check!)";
-                break;
-            case CHECKMATE_WHITE_WINS: message = "Checkmate! White wins."; break;
-            case CHECKMATE_BLACK_WINS: message = "Checkmate! Black wins."; break;
-            case STALEMATE: message = "Stalemate! Draw."; break;
-            case WHITE_WINS_BY_TIMEOUT: message = "White wins on time."; break;
-            case BLACK_WINS_BY_TIMEOUT: message = "Black wins on time."; break;
+
+    /**
+     * Handles the user attempting to make a move by releasing the mouse.
+     *
+     * @param startSquare The square where the piece was picked up.
+     * @param endSquare   The square where the piece was dropped.
+     */
+    public void handleMoveAttempt(Square startSquare, Square endSquare) {
+        if (gameLogic.getGameState().isGameOver()) return;
+
+        Piece piece = startSquare.getOccupyingPiece();
+        if (piece == null) return; // Should not happen if logic is correct
+
+        PieceType promotionType = null;
+
+        // Check if this is a potential promotion move
+        if (piece.getType() == PieceType.PAWN) {
+            int promotionRank = (piece.getColor() == PieceColor.WHITE) ? 7 : 0;
+            if (endSquare.getRank() == promotionRank) {
+                // Check if this specific move (start->end) is potentially legal
+                // We need to generate potential moves first to see if endSquare is reachable
+                List<Move> potentialMovesFromLogic = gameLogic.getLegalMovesForPiece(piece); // Use legal moves check
+                boolean isPromotionPossible = false;
+                for (Move m : potentialMovesFromLogic) {
+                    if (m.getEndSquare().equals(endSquare) && m.isPromotion()) {
+                        isPromotionPossible = true;
+                        break;
+                    }
+                }
+
+                if (isPromotionPossible) {
+                    promotionType = chessView.getPromotionChoice(piece.getColor());
+                    if (promotionType == null) {
+                        // User cancelled promotion, cancel move
+                        chessView.updateView(); // Restore board visually
+                        return;
+                    }
+                }
+            }
         }
-        if (view != null) {
-            view.setStatusMessage(message);
-        }
+
+        // Attempt to make the move in the model
+        boolean moveMade = gameLogic.makeMove(startSquare, endSquare, promotionType);
+
+        // Update the view regardless of success to show result or revert visual state
+        chessView.updateView();
+
+        // If move was successful, the game state (turn, status) changed,
+        // and the view update will reflect that.
     }
+
+    /**
+     * Gets the list of legal destination squares for a given piece.
+     * Used by the view (BoardPanel) to highlight moves.
+     *
+     * @param piece The piece selected by the user.
+     * @return A list of Squares the piece can legally move to.
+     */
+    public List<Square> getLegalMovesForPiece(Piece piece) {
+        if (piece == null || piece.getColor() != gameLogic.getGameState().getCurrentPlayerTurn()) {
+            return List.of(); // Return empty list if invalid piece or not their turn
+        }
+        // Convert List<Move> to List<Square> (destination squares)
+        return gameLogic.getLegalMovesForPiece(piece)
+                .stream()
+                .map(Move::getEndSquare)
+                .distinct() // Avoid duplicates if multiple moves end on same square (e.g., promotion)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Handles a player resigning.
+     * @param resigningPlayer The color of the player who resigned.
+     */
+    public void handleResignation(PieceColor resigningPlayer) {
+        if (gameLogic.getGameState().isGameOver()) return;
+
+        GameState.GameStatus newStatus = (resigningPlayer == PieceColor.WHITE)
+                ? GameState.GameStatus.BLACK_WINS_RESIGNATION // White resigns, Black wins
+                : GameState.GameStatus.WHITE_WINS_RESIGNATION; // Black resigns, White wins
+
+        gameLogic.getGameState().setGameStatus(newStatus);
+        stopTimers(); // Stop clocks on resignation
+        chessView.updateView(); // Update view to show result
+    }
+
+    // Add methods here later for handling draw offers, new game requests etc.
+    // These would interact with gameLogic and update the view.
 }
