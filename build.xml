@@ -1,63 +1,112 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<project default="create_run_jar" name="chess-java">
-    <!--this file was created by Eclipse Runnable JAR file Export Wizard-->
-    <!--ANT 1.7 is required-->
-    <!--define folder properties-->
-    <property name="dir.buildfile" value="."/>
-    <property name="dir.workspace" value="${dir.buildfile}/.."/>
-    <property name="dir.jarfile" value="${dir.buildfile}"/>
+<project default="create_run_jar" name="chess-game-mvc">
+    <!-- ANT 1.7+ is required -->
+    <!-- Define folder properties -->
+    <property name="project.name" value="chess-java"/>
+    <property name="src.dir" value="src"/>
+    <property name="resources.dir" value="resources"/>
+    <property name="build.dir" value="build"/>
+    <property name="classes.dir" value="${build.dir}/classes"/>
+    <property name="jar.dir" value="${build.dir}/jar"/>
+    <property name="main.class" value="src.Game"/> <!-- Update main class -->
+    <property name="jar.name" value="${project.name}.jar"/>
 
-    <!-- Target to clean the build directory -->
-    <target name="clean">
-        <delete dir="${dir.jarfile}/bin"/>
-        <delete file="${dir.jarfile}/chess-java.jar"/>
-        <echo>Cleaned bin directory and output JAR.</echo>
+    <!-- JUnit properties (adjust paths as needed) -->
+    <property name="test.src.dir" value="test"/>
+    <property name="test.classes.dir" value="${build.dir}/test-classes"/>
+    <property name="test.reports.dir" value="${build.dir}/test-reports"/>
+    <!-- Define classpath including JUnit JARs - download these or use Ivy/Maven Ant Tasks -->
+    <path id="junit.classpath">
+        <!-- Add paths to your downloaded JUnit 5 JARs here -->
+        <!-- Example:
+        <pathelement location="path/to/junit-platform-console-standalone-X.Y.Z.jar"/>
+        -->
+        <!-- Or include all jars from a lib directory -->
+        <fileset dir="lib" includes="**/*.jar"/>
+        <pathelement location="${classes.dir}"/> <!-- Include compiled main classes -->
+    </path>
+    <path id="test.classpath">
+        <path refid="junit.classpath"/>
+        <pathelement location="${test.classes.dir}"/>
+    </path>
+
+    <!-- Targets -->
+    <target name="clean" description="Clean up build artifacts">
+        <delete dir="${build.dir}"/>
     </target>
 
-    <!-- Target to compile the source code -->
-    <!-- NOTE: Assumes source files are in 'src' and resources in 'resources' -->
-    <target name="compile">
-        <mkdir dir="${dir.jarfile}/bin"/>
-        <javac srcdir="${dir.buildfile}/src"
-               destdir="${dir.jarfile}/bin"
-               classpath="jar-in-jar-loader.zip"
-               includeantruntime="false"
-               debug="true" debuglevel="lines,vars,source">
-            <compilerarg value="-Xlint:all"/>
+    <target name="init" description="Create build directories">
+        <mkdir dir="${build.dir}"/>
+        <mkdir dir="${classes.dir}"/>
+        <mkdir dir="${jar.dir}"/>
+        <mkdir dir="${test.classes.dir}"/>
+        <mkdir dir="${test.reports.dir}"/>
+    </target>
+
+    <target name="compile" depends="init" description="Compile main source code">
+        <javac srcdir="${src.dir}" destdir="${classes.dir}" includeantruntime="false" classpathref="junit.classpath"> <!-- Add JUnit to compile path if needed -->
+            <compilerarg value="-Xlint:unchecked"/>
+            <compilerarg value="-Xlint:deprecation"/>
         </javac>
-        <!-- Copy resources to the bin directory so they are found alongside classes -->
-        <copy todir="${dir.jarfile}/bin">
-            <fileset dir="${dir.buildfile}/resources"/>
+        <!-- Copy resources -->
+        <copy todir="${classes.dir}">
+            <fileset dir="${resources.dir}"/>
         </copy>
-        <echo>Compilation complete. Class files in 'bin'. Resources copied to 'bin'.</echo>
     </target>
 
+    <target name="compile-tests" depends="compile" description="Compile test source code">
+        <javac srcdir="${test.src.dir}" destdir="${test.classes.dir}" includeantruntime="false" classpathref="test.classpath">
+            <compilerarg value="-Xlint:unchecked"/>
+            <compilerarg value="-Xlint:deprecation"/>
+        </javac>
+    </target>
 
-    <!-- Target to create the runnable JAR -->
-    <!-- NOTE: This target now DEPENDS on the 'compile' target -->
-    <target name="create_run_jar" depends="compile">
-        <jar destfile="${dir.jarfile}/chess-java.jar">
+    <target name="test" depends="compile-tests" description="Run JUnit tests">
+        <junitlauncher printsummary="true" haltonfailure="true">
+            <classpath refid="test.classpath"/>
+            <testclasses outputdir="${test.reports.dir}">
+                <fileset dir="${test.classes.dir}">
+                    <include name="**/*Test.class"/>
+                </fileset>
+                <listener type="legacy-plain" sendSysOut="true" sendSysErr="true"/>
+                <listener type="legacy-xml" sendSysOut="true" sendSysErr="true"/>
+            </testclasses>
+        </junitlauncher>
+        <!-- Optional: Generate HTML report from XML -->
+        <junitreport todir="${test.reports.dir}">
+            <fileset dir="${test.reports.dir}">
+                <include name="TEST-*.xml"/>
+            </fileset>
+            <report format="frames" todir="${test.reports.dir}/html"/>
+        </junitreport>
+    </target>
+
+    <!-- Create a runnable JAR using jar-in-jar loader -->
+    <target name="create_run_jar" depends="compile" description="Create runnable JAR with dependencies">
+        <jar destfile="${jar.dir}/${jar.name}">
             <manifest>
                 <attribute name="Main-Class" value="org.eclipse.jdt.internal.jarinjarloader.JarRsrcLoader"/>
-                <!-- *** CORRECTED Main Class *** -->
-                <attribute name="Rsrc-Main-Class" value="Game"/>
+                <attribute name="Rsrc-Main-Class" value="${main.class}"/>
                 <attribute name="Class-Path" value="."/>
-                <!-- The loader finds resources/classes from the root inside the JAR -->
+                <!-- Rsrc-Class-Path points to packaged dependencies -->
                 <attribute name="Rsrc-Class-Path" value="./"/>
             </manifest>
-            <zipfileset src="jar-in-jar-loader.zip"/>
-            <!-- Include everything from the bin directory (compiled classes AND copied resources) -->
-            <fileset dir="${dir.jarfile}/bin"/>
-            <!-- No longer need the separate resources fileset here, as they are copied to bin -->
-            <!-- <fileset dir="${dir.jarfile}/resources"/> -->
+            <zipfileset src="jar-in-jar-loader.zip"/> <!-- Include the loader -->
+            <fileset dir="${classes.dir}"/> <!-- Include compiled classes and resources -->
+            <!-- Add any external library JARs needed here if not using jar-in-jar for them -->
+            <!-- <zipfileset dir="lib" includes="*.jar" prefix=""/> -->
         </jar>
-        <echo>Runnable JAR 'chess-java.jar' created.</echo>
+        <echo message="Runnable JAR created at ${jar.dir}/${jar.name}"/>
     </target>
 
-    <!-- Default target can still be create_run_jar -->
-    <!-- Or add a 'run' target -->
-    <target name="run" depends="create_run_jar">
-        <java jar="${dir.jarfile}/chess-java.jar" fork="true"/>
+    <!-- Create a simple runnable JAR (no dependencies included) -->
+    <target name="create_simple_jar" depends="compile" description="Create simple runnable JAR (no deps)">
+        <jar destfile="${jar.dir}/${project.name}-simple.jar" basedir="${classes.dir}">
+            <manifest>
+                <attribute name="Main-Class" value="${main.class}"/>
+            </manifest>
+        </jar>
+        <echo message="Simple JAR created at ${jar.dir}/${project.name}-simple.jar"/>
     </target>
 
 </project>
