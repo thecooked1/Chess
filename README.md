@@ -77,21 +77,17 @@
 ## New Structure Organization
 
 
-    chess-game/
+    chess-java/
     ├── src/                      # Source code root
-    │   ├── com/chess/controller/ # Controller classes (GameController)
-    │   ├── com/chess/model/      # Model classes (GameLogic, GameState, Board, Move, etc.)
-    │   │   └── pieces/           # Piece subclasses and related enums
-    │   ├── com/chess/view/       # View classes (GameFrame, ChessBoardPanel, etc.)
-    │   └── com/chess/game/       # Main application entry point (Game.java)
+    │   ├── main    
+    │   │   ├── /controller/      # Controller classes (GameController)
+    │   │   ├── /model/           # Model classes (GameLogic, GameState, Board, Move, etc.)
+    │   │   │    └── pieces/      # Piece subclasses and related enums
+    │   │   ├── /view/            # View classes (GameFrame, ChessBoardPanel, etc.)
+    │   │   └── /Game             # Main application entry point (Game.java)
+    │   └── test/                 # Unit test source code root
     │
     ├── resources/                # Image assets (.png files)
-    │
-    ├── test/                     # Unit test source code root
-    │   └── com/chess/model/      # Tests mirroring model structure
-    │       └── pieces/
-    │
-    ├── lib/                      # Optional: For third-party libraries (like JUnit JARs)
     │
     ├── build/                    # Build output directory (created by Ant)
     │   ├── classes/              # Compiled .class files
