@@ -56,7 +56,7 @@ public class GameFrame extends JFrame {
         blackPlayerLabel = new JLabel("Black: Player 2");
         whiteClockLabel = new JLabel("Time: 00:00:00");
         blackClockLabel = new JLabel("Time: 00:00:00");
-        statusLabel = new JLabel("White's turn");
+        statusLabel = new JLabel("White's turn to move.");
 
         // Center align text
         whitePlayerLabel.setHorizontalAlignment(SwingConstants.CENTER);

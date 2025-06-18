@@ -6,13 +6,27 @@ import main.model.PGNParser.Move;
 import main.model.PGNParser.Parser;
 
 // --- Imports for the View ---
+import main.model.Position;
+import main.model.pieces.Colour;
+import main.model.pieces.Pawn;
+import main.model.pieces.Piece;
+import main.view.ChessBoardPanel;
 import main.view.GameFrame;
 import main.view.StartMenu; // For restarting the game
 
 // --- Standard Java/Swing Imports ---
 import javax.swing.*;
 import java.io.File;
+import java.util.HashSet;
 import java.util.List;
+import java.awt.Point;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+
 
 public class GameController {
 
@@ -20,10 +34,13 @@ public class GameController {
     private final Board board; // Your powerful Board engine is the primary model
     private final Interpreter pgnInterpreter;
 
+    private Position selectedPosition = null;
+    private List<Move> legalMovesForSelectedPiece = null;
+
     // State for PGN Replay
     private List<String> pgnMoveTokens;
     private int currentPgnMoveIndex;
-    private boolean isWhiteTurn;
+    private boolean isWhiteTurn = true;
 
     public GameController() {
         // 1. Create the View and the Model
@@ -33,7 +50,7 @@ public class GameController {
 
         // 2. Initial display
         this.view.getChessBoardPanel().updateBoard(this.board);
-        this.view.setStatus("Load a PGN file to start replay.");
+        //this.view.setStatus("Load a PGN file to start replay.");
 
         // 3. Connect Controller to View (add event listeners)
         this.initListeners();
@@ -47,9 +64,12 @@ public class GameController {
      */
     private void initListeners() {
         this.view.getLoadPgnMenuItem().addActionListener(e -> handleLoadPgn());
-        this.view.getNextMoveButton().addActionListener(e -> handleNextMove());
-        this.view.getPrevMoveButton().addActionListener(e -> handlePrevMove()); // For later
+        this.view.getNextMoveButton().addActionListener(e -> handlePgnNextMove());
+        this.view.getPrevMoveButton().addActionListener(e -> handlePgnPrevMove()); // For later
         this.view.addQuitListener(e -> quitGame());
+        BoardMouseListener mouseListener = new BoardMouseListener();
+        this.view.getChessBoardPanel().addMouseListener(mouseListener);
+        this.view.getChessBoardPanel().addMouseMotionListener(mouseListener);
     }
 
     /**
@@ -97,7 +117,7 @@ public class GameController {
      * Handles the "Next >" button click.
      * Applies the next move from the loaded PGN to the board.
      */
-    private void handleNextMove() {
+    private void handlePgnNextMove() {
         if (pgnMoveTokens == null || currentPgnMoveIndex >= pgnMoveTokens.size() - 1) {
             view.setStatus("End of game.");
             return; // No more moves
@@ -138,7 +158,7 @@ public class GameController {
      * Placeholder for "Previous" button functionality.
      * This is complex and can be implemented later.
      */
-    private void handlePrevMove() {
+    private void handlePgnPrevMove() {
         JOptionPane.showMessageDialog(view, "Previous move functionality not yet implemented.");
         // To implement this, you would reset the board and replay all moves up to (currentPgnMoveIndex - 1).
     }
@@ -149,4 +169,117 @@ public class GameController {
             System.exit(0);
         }
     }
+
+    private class BoardMouseListener extends MouseAdapter {
+
+        @Override
+        public void mousePressed(MouseEvent e) {
+            // Don't allow interaction during PGN replay
+            if (pgnMoveTokens != null) return;
+
+            Point point = e.getPoint();
+            ChessBoardPanel boardPanel = view.getChessBoardPanel();
+            Position clickedPos = boardPanel.getPositionFromPoint(point);
+            if (clickedPos == null) return;
+
+            Piece clickedPiece = board.getPiece(clickedPos.getRow(), clickedPos.getCol());
+
+            // Check if the player clicked their own piece
+            Colour currentTurnColor = isWhiteTurn ? Colour.WHITE : Colour.BLACK;
+            if (clickedPiece != null && clickedPiece.getColor() == currentTurnColor) {
+                selectedPosition = clickedPos;
+
+                // Show visual feedback for dragging
+                boardPanel.setDraggedPiece(clickedPiece, point);
+
+                // Highlight the selected square
+                boardPanel.selectSquare(selectedPosition);
+
+                // 1. Ask the engine for all legal moves for the selected piece.
+                List<Position> legalTargets = board.getLegalMovesForPiece(selectedPosition);
+
+                // 2. Convert the List to a Set for the highlight method.
+                Set<Position> highlightSet = new HashSet<>(legalTargets);
+
+                // 3. Tell the view to draw the highlights.
+                boardPanel.highlightLegalMoves(highlightSet);
+            }
+        }
+
+        @Override
+        public void mouseReleased(MouseEvent e) {
+            // If no piece was selected during mousePressed, do nothing.
+            if (selectedPosition == null) return;
+
+            ChessBoardPanel boardPanel = view.getChessBoardPanel();
+            Position releasePos = boardPanel.getPositionFromPoint(e.getPoint());
+
+            // Store the start position before clearing state
+            Position startPos = selectedPosition;
+
+            // --- Always clear visual feedback first ---
+            boardPanel.clearDraggedPiece();
+            boardPanel.clearHighlights();
+            boardPanel.clearSelection();
+            selectedPosition = null;
+
+            if (releasePos != null) {
+                Optional<String> promotionChoice = Optional.empty();
+
+                // Check if this move is a promotion
+                Piece movingPiece = board.getPiece(startPos.getRow(), startPos.getCol());
+                if (movingPiece instanceof Pawn) {
+                    int promotionRank = (movingPiece.getColor() == Colour.WHITE) ? 0 : 7;
+                    if (releasePos.getRow() == promotionRank) {
+                        // Ask the user for their choice
+                        promotionChoice = Optional.of(view.askPromotionChoice());
+                    }
+                }
+
+                // --- Call the new, robust engine method ---
+                boolean success = board.applyMove(startPos, releasePos, promotionChoice);
+
+                if (success) {
+                    isWhiteTurn = !isWhiteTurn; // Switch turns only on successful move
+                }
+            }
+
+            // Always update the view to show the result (either the new board or the snapped-back piece)
+            updateView();
+        }
+
+        @Override
+        public void mouseDragged(MouseEvent e) {
+            if (selectedPosition != null) {
+                view.getChessBoardPanel().setDraggedPiece(board.getPiece(selectedPosition.getRow(), selectedPosition.getCol()), e.getPoint());
+            }
+        }
+    }
+
+    private void updateView() {
+        view.getChessBoardPanel().updateBoard(board);
+
+        // Check for game over states
+        Colour currentTurnColor = isWhiteTurn ? Colour.WHITE : Colour.BLACK;
+        if (board.isInCheck(currentTurnColor) && !board.hasAnyLegalMoves(currentTurnColor)) {
+            view.setStatus("Checkmate! " + (isWhiteTurn ? "Black" : "White") + " wins.");
+        } else if (!board.isInCheck(currentTurnColor) && !board.hasAnyLegalMoves(currentTurnColor)) {
+            view.setStatus("Stalemate! It's a draw.");
+        } else {
+            String status = (isWhiteTurn ? "White" : "Black") + "'s turn";
+            if (board.isInCheck(currentTurnColor)) {
+                status += " (Check)";
+            }
+            view.setStatus(status);
+        }
+    }
+
+    // --- Helper methods for mouse logic ---
+
+    // To be implemented in Step 3
+    private void highlightLegalMovesFor(Position startPos) { }
+    private Optional<Move> findMove(Position start, Position end) { return Optional.empty(); }
+    private boolean isPromotionMove(Position start, Position end) { return false; }
 }
+
+

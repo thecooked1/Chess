@@ -5,6 +5,7 @@ import main.model.Board.Board;
 public abstract class Piece {
     protected Colour colour;
     protected char symbol;
+    protected boolean hasMoved = false;
 
     public Piece(Colour colour) {
         this.colour = colour;
@@ -13,6 +14,16 @@ public abstract class Piece {
     public Colour getColor() {
         return colour;
     }
+
+    public boolean hasMoved() {
+        return hasMoved;
+    }
+
+    public void setMoved(boolean hasMoved) {
+         this.hasMoved = hasMoved;
+    }
+
+
 
     public abstract boolean isValidMove(int fromRow, int fromCol, int toRow, int toCol, Board board);
     public abstract char getSymbol();

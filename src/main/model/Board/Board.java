@@ -1,6 +1,11 @@
 package main.model.Board;
+import main.model.Position;
 import main.model.pieces.*;
 import main.model.PGNParser.Move;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 public class Board {
     private final Piece[][] grid;
@@ -378,6 +383,100 @@ public class Board {
             System.out.println("En Passant Target: None");*/
         }
     }
+    /**
+     * Generates a list of all legal destination positions for a piece at a given start position.
+     * This is what the GUI controller needs to highlight squares.
+     */
+    public List<Position> getLegalMovesForPiece(Position startPos) {
+        List<Position> legalMoves = new ArrayList<>();
+        Piece piece = getPiece(startPos.getRow(), startPos.getCol());
+        if (piece == null) {
+            return legalMoves; // No piece, no moves
+        }
 
+        Colour playerColor = piece.getColor();
+
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                Position targetPos = new Position(r, c);
+                // Check if the move is pseudo-legal
+                if (piece.isValidMove(startPos.getRow(), startPos.getCol(), targetPos.getRow(), targetPos.getCol(), this)) {
+                    // Simulate the move to see if it leaves the king in check
+                    Piece backupTarget = grid[targetPos.getRow()][targetPos.getCol()];
+                    grid[targetPos.getRow()][targetPos.getCol()] = piece;
+                    grid[startPos.getRow()][startPos.getCol()] = null;
+
+                    boolean leavesKingInCheck = isInCheck(playerColor);
+
+                    // Undo the move
+                    grid[startPos.getRow()][startPos.getCol()] = piece;
+                    grid[targetPos.getRow()][targetPos.getCol()] = backupTarget;
+
+                    if (!leavesKingInCheck) {
+                        legalMoves.add(targetPos);
+                    }
+                }
+            }
+        }
+        // TODO: Add logic for castling and en passant to this list
+        return legalMoves;
+    }
+
+    /**
+     * Applies a move given a start and end position. This is for the GUI controller.
+     * Returns true if the move was successful.
+     */
+    public boolean applyMove(Position start, Position end, Optional<String> promotionPiece) {
+        Piece movingPiece = getPiece(start.getRow(), start.getCol());
+        if (movingPiece == null) return false;
+
+        Colour currentColour = movingPiece.getColor();
+
+        // Check if this move is in the list of legal moves. This is the ultimate validation.
+        boolean isLegal = getLegalMovesForPiece(start).contains(end);
+        if (!isLegal) {
+            // TODO: Also need to check for castling moves here, as they are special
+            System.err.println("GUI move from " + start + " to " + end + " is not legal.");
+            return false;
+        }
+
+        // --- Execute the move ---
+        // Handle en passant capture (which is a special case)
+        if (movingPiece instanceof Pawn && end.getCol() != start.getCol() && getPiece(end.getRow(), end.getCol()) == null) {
+            int capturedPawnRow = currentColour == Colour.WHITE ? end.getRow() + 1 : end.getRow() - 1;
+            grid[capturedPawnRow][end.getCol()] = null;
+        }
+
+        // Move the piece
+        grid[end.getRow()][end.getCol()] = movingPiece;
+        grid[start.getRow()][start.getCol()] = null;
+
+        // Handle promotion
+        if (movingPiece instanceof Pawn && (end.getRow() == 0 || end.getRow() == 7)) {
+            String promo = promotionPiece.orElse("Q").toUpperCase(); // Default to Queen
+            Piece promoted;
+            switch (promo) {
+                case "R": promoted = new Rook(currentColour); break;
+                case "B": promoted = new Bishop(currentColour); break;
+                case "N": promoted = new Knight(currentColour); break;
+                default:  promoted = new Queen(currentColour); break;
+            }
+            grid[end.getRow()][end.getCol()] = promoted;
+        }
+
+        // Update piece's internal state (for castling rights)
+        if (movingPiece instanceof King || movingPiece instanceof Rook) {
+            movingPiece.setMoved(true);
+        }
+
+        // Update en passant target for the *next* turn
+        if (movingPiece instanceof Pawn && Math.abs(start.getRow() - end.getRow()) == 2) {
+            enPassantTarget = new int[]{(start.getRow() + end.getRow()) / 2, start.getCol()};
+        } else {
+            enPassantTarget = null;
+        }
+
+        return true;
+    }
 
 }
