@@ -1,154 +1,151 @@
 package main.view;
 
-import main.controller.GameController; // Requires controller reference
-import main.model.Color;
-import main.model.PieceType;
+// Corrected Imports
+import main.model.pieces.Colour;
+import main.model.pieces.Piece;
+import main.model.pieces.*; // Queen, Rook, etc. for promotion
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionListener; // Forward button actions
+import java.awt.event.ActionListener;
+import java.util.Map;
 
 public class GameFrame extends JFrame {
 
+    // --- All GUI Components Declared as final ---
     private final ChessBoardPanel chessBoardPanel;
     private final JLabel statusLabel;
     private final JLabel whitePlayerLabel;
     private final JLabel blackPlayerLabel;
-    private final JLabel whiteClockLabel;
-    private final JLabel blackClockLabel;
-    private final JButton newGameButton;
+    private final JLabel whiteClockLabel; // The variable from your error
+    private final JLabel blackClockLabel; // The variable from your error
     private final JButton quitButton;
-    // Add instruction button if needed
+
+    // PGN and Replay components
+    private final JMenuItem loadPgnMenuItem;
+    private final JButton nextMoveButton;
+    private final JButton prevMoveButton;
 
     public GameFrame() {
         super("Chess Game");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // Or DISPOSE_ON_CLOSE if StartMenu should reappear
-        setLayout(new BorderLayout(10, 10)); // Add gaps
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout(10, 10));
 
-        // Attempt to set application icon
+        // Set application icon
         Image icon = PieceImageLoader.getApplicationIcon();
-        if (icon != null) {
-            setIconImage(icon);
-        }
+        if (icon != null) { setIconImage(icon); }
 
-        // Board Panel (Center)
-        chessBoardPanel = new ChessBoardPanel();
+        // --- Create Menu Bar ---
+        JMenuBar menuBar = new JMenuBar();
+        JMenu fileMenu = new JMenu("File");
+        loadPgnMenuItem = new JMenuItem("Load PGN..."); // Initialization
+        fileMenu.add(loadPgnMenuItem);
+        menuBar.add(fileMenu);
+        setJMenuBar(menuBar);
+
+        // --- Board Panel (Center) ---
+        chessBoardPanel = new ChessBoardPanel(); // Initialization
         add(chessBoardPanel, BorderLayout.CENTER);
 
-        // Status/Info Panel (North or South)
-        JPanel infoPanel = new JPanel(new GridLayout(3, 2, 5, 5)); // Rows, Cols, hgap, vgap
+        // --- Status/Info Panel (North) ---
+        JPanel infoPanel = new JPanel(new GridLayout(3, 2, 5, 5)); // 3 rows, 2 columns
+        infoPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+        // All labels are initialized here, inside the constructor
         whitePlayerLabel = new JLabel("White: Player 1");
         blackPlayerLabel = new JLabel("Black: Player 2");
         whiteClockLabel = new JLabel("Time: 00:00:00");
         blackClockLabel = new JLabel("Time: 00:00:00");
         statusLabel = new JLabel("White's turn");
 
-        // Center align text in labels
+        // Center align text
         whitePlayerLabel.setHorizontalAlignment(SwingConstants.CENTER);
         blackPlayerLabel.setHorizontalAlignment(SwingConstants.CENTER);
         whiteClockLabel.setHorizontalAlignment(SwingConstants.CENTER);
         blackClockLabel.setHorizontalAlignment(SwingConstants.CENTER);
         statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        statusLabel.setFont(statusLabel.getFont().deriveFont(Font.BOLD));
 
-        // Make status label span two columns
-        JPanel statusPanel = new JPanel(new BorderLayout());
-        statusPanel.add(statusLabel, BorderLayout.CENTER);
-
-
+        // Add components to the panel
         infoPanel.add(whitePlayerLabel);
         infoPanel.add(blackPlayerLabel);
         infoPanel.add(whiteClockLabel);
         infoPanel.add(blackClockLabel);
-        // Add status spanning two columns below clocks
-        // infoPanel.add(statusLabel); // Add empty label for grid alignment? No, use different layout or span.
 
+        // Use a separate panel for the status label to span columns
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.add(infoPanel, BorderLayout.CENTER);
-        topPanel.add(statusPanel, BorderLayout.SOUTH); // Status below player info/clocks
-
+        topPanel.add(statusLabel, BorderLayout.SOUTH);
 
         add(topPanel, BorderLayout.NORTH);
 
-        // Button Panel (South)
+        // --- Button Panel (South) ---
         JPanel buttonPanel = new JPanel(new FlowLayout());
-        newGameButton = new JButton("New Game");
+        nextMoveButton = new JButton("Next >");
+        prevMoveButton = new JButton("< Prev");
         quitButton = new JButton("Quit");
-        buttonPanel.add(newGameButton);
+
+        nextMoveButton.setEnabled(false);
+        prevMoveButton.setEnabled(false);
+
+        buttonPanel.add(prevMoveButton);
+        buttonPanel.add(nextMoveButton);
         buttonPanel.add(quitButton);
         add(buttonPanel, BorderLayout.SOUTH);
 
-        pack(); // Size the frame based on components
-        setMinimumSize(getPreferredSize()); // Prevent resizing too small
-        setLocationRelativeTo(null); // Center on screen
-        // setResizable(false); // Optional: prevent resizing
+        pack();
+        setMinimumSize(getPreferredSize());
+        setLocationRelativeTo(null);
     }
 
-    public ChessBoardPanel getChessBoardPanel() {
-        return chessBoardPanel;
-    }
+    // --- Getters for Controller to access components ---
+    public ChessBoardPanel getChessBoardPanel() { return chessBoardPanel; }
+    public JMenuItem getLoadPgnMenuItem() { return loadPgnMenuItem; }
+    public JButton getNextMoveButton() { return nextMoveButton; }
+    public JButton getPrevMoveButton() { return prevMoveButton; }
 
-    public void setStatus(String text) {
-        statusLabel.setText(text);
+    // --- Methods for Controller to update the View ---
+    public void setStatus(String text) { statusLabel.setText(text); }
+    public void updatePlayerInfo(Map<String, String> headers) {
+        whitePlayerLabel.setText("White: " + headers.getOrDefault("White", "Unknown"));
+        blackPlayerLabel.setText("Black: " + headers.getOrDefault("Black", "Unknown"));
     }
-
-    public void setPlayerNames(String whiteName, String blackName) {
-        whitePlayerLabel.setText("White: " + whiteName);
-        blackPlayerLabel.setText("Black: " + blackName);
+    public void enableReplayControls(boolean enabled) {
+        nextMoveButton.setEnabled(enabled);
+        prevMoveButton.setEnabled(enabled);
     }
-
-    public void updateClock(Color color, String time) {
-        if (color == Color.WHITE) {
+    public void updateClock(Colour colour, String time) {
+        if (colour == Colour.WHITE) {
             whiteClockLabel.setText("Time: " + time);
         } else {
             blackClockLabel.setText("Time: " + time);
         }
     }
 
-
-    // Methods to add listeners (called by Controller)
-    public void addNewGameListener(ActionListener listener) {
-        newGameButton.addActionListener(listener);
-    }
-
+    // --- Listener registration methods ---
     public void addQuitListener(ActionListener listener) {
         quitButton.addActionListener(listener);
     }
 
-    // Method to display game over messages
+    // --- Dialogs ---
     public void showGameOverDialog(String message, String title) {
         JOptionPane.showMessageDialog(this, message, title, JOptionPane.INFORMATION_MESSAGE);
     }
 
-    // Method for pawn promotion query
-    public PieceType askPromotionChoice() {
-        PieceType[] choices = {PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT};
-        // Use Icons for a better UI
-        ImageIcon[] icons = new ImageIcon[choices.length];
-        for(int i=0; i<choices.length; i++){
-            Image img = PieceImageLoader.getImage(choices[i], Color.WHITE); // Show white piece icons
-            if(img != null) {
-                icons[i] = new ImageIcon(img.getScaledInstance(30, 30, Image.SCALE_SMOOTH));
-            } else {
-                icons[i] = null; // Fallback if image fails
+    // The corrected promotion dialog
+    public String askPromotionChoice() {
+        Piece[] promotionPieces = { new Queen(Colour.WHITE), new Rook(Colour.WHITE), new Bishop(Colour.WHITE), new Knight(Colour.WHITE) };
+        ImageIcon[] icons = new ImageIcon[promotionPieces.length];
+        for (int i = 0; i < promotionPieces.length; i++) {
+            Image img = PieceImageLoader.getImage(promotionPieces[i]);
+            if (img != null) {
+                icons[i] = new ImageIcon(img.getScaledInstance(40, 40, Image.SCALE_SMOOTH));
             }
         }
-
-        int choice = JOptionPane.showOptionDialog(
-                this,
-                "Choose piece for promotion:",
-                "Pawn Promotion",
-                JOptionPane.DEFAULT_OPTION,
-                JOptionPane.PLAIN_MESSAGE, // Use PLAIN_MESSAGE with custom icons
-                null, // No parent icon
-                icons, // Use the piece icons as options
-                icons[0] // Default to Queen icon
-        );
-
-        if (choice >= 0 && choice < choices.length) {
-            return choices[choice];
-        } else {
-            return PieceType.QUEEN; // Default to Queen if dialog is closed or invalid choice
+        int choice = JOptionPane.showOptionDialog(this, "Choose piece for promotion:", "Pawn Promotion", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, icons, icons[0]);
+        if (choice >= 0 && choice < promotionPieces.length) {
+            return String.valueOf(promotionPieces[choice].getSymbol()).toUpperCase();
         }
+        return "Q"; // Default to Queen
     }
-
 }

@@ -17,12 +17,9 @@ public class Game {
         }
 
         SwingUtilities.invokeLater(() -> {
-            // Create controller first
-            GameController controller = new GameController();
+             new GameController();
 
-            // Create and run the Start Menu, passing the controller's setup method as a callback
-            StartMenu startMenu = new StartMenu(controller::setupGame);
-            startMenu.run();
+
         });
     }
 }

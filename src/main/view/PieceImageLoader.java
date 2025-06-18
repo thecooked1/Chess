@@ -1,90 +1,74 @@
 package main.view;
-
-import main.model.Color;
-import main.model.PieceType;
-
+import main.model.pieces.Colour;
+import main.model.pieces.Piece;
+import main.model.pieces.Pawn;
 import javax.imageio.ImageIO;
 import java.awt.Image;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 
 public class PieceImageLoader {
     private static final Map<String, Image> imageCache = new HashMap<>();
-    private static final String RESOURCE_PATH = "/"; // Assuming resources are at the root of the classpath
+    private static final String RESOURCE_PATH = "/";
 
-    public static Image getImage(PieceType type, Color color) {
-        String key = generateKey(type, color);
+    /**
+     * The primary method to get an image for a given piece object.
+     */
+    public static Image getImage(Piece piece) {
+        if (piece == null) return null;
+
+        char pieceSymbol = piece.getSymbol();
+        Colour pieceColor = piece.getColor();
+
+        String typeSuffix = "";
+        switch (Character.toLowerCase(pieceSymbol)) {
+            case 'p': typeSuffix = "pawn"; break;
+            case 'r': typeSuffix = "rook"; break;
+            case 'n': typeSuffix = "knight"; break; // 'n' for knight
+            case 'b': typeSuffix = "bishop"; break;
+            case 'q': typeSuffix = "queen"; break;
+            case 'k': typeSuffix = "king"; break;
+            default: return null; // Unknown piece symbol
+        }
+
+        char colorPrefix = (pieceColor == Colour.WHITE) ? 'w' : 'b';
+        String fileName = colorPrefix + typeSuffix + ".png";
+        String key = fileName;
+
         if (!imageCache.containsKey(key)) {
-            loadImage(key, getFileName(type, color));
+            loadImage(key, fileName);
         }
         return imageCache.get(key);
     }
 
+    /**
+     * Internal helper to load an image from resources and cache it.
+     */
     private static void loadImage(String key, String fileName) {
         try {
             String fullPath = RESOURCE_PATH + fileName;
-            System.out.println("Attempting to load resource: " + fullPath); // DEBUG
             InputStream is = PieceImageLoader.class.getResourceAsStream(fullPath);
             if (is == null) {
-                // More specific error:
-                System.err.println("FAILED to find resource stream for: " + fullPath + ". Check classpath and build resource copying.");
+                System.err.println("FAILED to find resource stream for: " + fullPath);
                 throw new IOException("Resource not found in classpath: " + fullPath);
             }
             Image img = ImageIO.read(is);
             imageCache.put(key, img);
             is.close();
-            System.out.println("Successfully loaded: " + fileName); // DEBUG
         } catch (IOException e) {
             System.err.println("Failed to load image: " + fileName + " - " + e.getMessage());
-            // Optionally put a placeholder image or throw an exception
-            imageCache.put(key, null); // Or some default error image
+            imageCache.put(key, null);
         }
     }
 
-    private static String generateKey(PieceType type, Color color) {
-        return color.name().toLowerCase() + "_" + type.name().toLowerCase();
-    }
-
-    private static String getFileName(PieceType type, Color color) {
-        char colorPrefix = (color == Color.WHITE) ? 'w' : 'b';
-        String typeSuffix = "";
-        switch (type) {
-            case PAWN: typeSuffix = "pawn"; break;
-            case ROOK: typeSuffix = "rook"; break;
-            case KNIGHT: typeSuffix = "knight"; break;
-            case BISHOP: typeSuffix = "bishop"; break;
-            case QUEEN: typeSuffix = "queen"; break;
-            case KING: typeSuffix = "king"; break;
-        }
-        return colorPrefix + typeSuffix + ".png";
-        // Legacy names: wp.png, bp.png, wrook.png, brook.png etc. Adjust if needed.
-            /* Example legacy mapping:
-             switch (type) {
-                case PAWN:   return colorPrefix + "pawn.png"; // wpawn.png, bpawn.png
-                case ROOK:   return colorPrefix + "rook.png"; // wrook.png, brook.png
-                case KNIGHT: return colorPrefix + "knight.png"; // wknight.png, bknight.png
-                case BISHOP: return colorPrefix + "bishop.png"; // wbishop.png, bbishop.png
-                case QUEEN:  return colorPrefix + "queen.png"; // wqueen.png, bqueen.png
-                case KING:   return colorPrefix + "king.png"; // wking.png, bking.png
-                default:     return "error.png"; // Should not happen
-             }
-             */
-    }
-
-    // Helper for getting the application icon image (if needed)
+    /**
+     * Helper for getting the application icon image.
+     */
     public static Image getApplicationIcon() {
-        String key = "icon_wp";
-        if (!imageCache.containsKey(key)) {
-            // Assuming wp.png or similar can be used as an icon
-            loadImage(key, "wpawn.png"); // Use a standard piece image like white pawn
-        }
-        return imageCache.get(key);
+        // Create a temporary white pawn to get its image
+        return getImage(new Pawn(Colour.WHITE));
     }
 
-    public static Image getImage(PieceType wpawn, java.awt.Color wpawn1) {
-        return null;
-    }
 }

@@ -1,20 +1,16 @@
 package main.view;
-
-import main.model.Board;
-import main.model.GameState;
+import main.model.Board.Board;
 import main.model.Position;
-import main.model.Piece;
-
+import main.model.pieces.Piece;
 import javax.swing.*;
 import java.awt.*;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class ChessBoardPanel extends JPanel {
 
     private final SquarePanel[][] squarePanels;
-    private GameState currentGameState;
+    private Board board;
     private final Set<Position> highlightedSquares = new HashSet<>();
     private Position selectedSquare = null;
 
@@ -26,7 +22,7 @@ public class ChessBoardPanel extends JPanel {
         setLayout(new GridLayout(8, 8));
         squarePanels = new SquarePanel[8][8];
         initializeBoardSquares();
-        setPreferredSize(new Dimension(400, 400)); // 8 * 50
+        setPreferredSize(new Dimension(400, 400));
     }
 
     private void initializeBoardSquares() {
@@ -38,8 +34,15 @@ public class ChessBoardPanel extends JPanel {
         }
     }
 
-    public void updateBoard(GameState gameState) {
-        this.currentGameState = gameState;
+    public void updateBoard(Board board) {
+        this.board = board;
+        if (board == null) return;
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                Piece piece = board.getPiece(r, c);
+                squarePanels[r][c].setPiece(piece);
+            }
+        }
         this.repaint();
     }
 
@@ -54,7 +57,7 @@ public class ChessBoardPanel extends JPanel {
 
     public void clearHighlights() {
         for (Position pos : highlightedSquares) {
-            if (currentGameState.getBoard().isValidPosition(pos)) { // Check bounds just in case
+            if (this.board != null && this.board.isValidPosition(pos.getRow(), pos.getCol())) {
                 squarePanels[pos.getRow()][pos.getCol()].setHighlighted(false);
             }
         }
@@ -63,31 +66,31 @@ public class ChessBoardPanel extends JPanel {
     }
 
     public void selectSquare(Position position) {
-        clearSelection(); // Clear previous selection
-        if (position != null && currentGameState.getBoard().isValidPosition(position)) {
+        clearSelection();
+        if (position != null && this.board != null && this.board.isValidPosition(position.getRow(), position.getCol())) {
             selectedSquare = position;
             squarePanels[position.getRow()][position.getCol()].setSelected(true);
         }
         repaint();
     }
 
+
     public void clearSelection() {
-        if (selectedSquare != null && currentGameState.getBoard().isValidPosition(selectedSquare)) {
+        if (selectedSquare != null && this.board != null && this.board.isValidPosition(selectedSquare.getRow(), selectedSquare.getCol())) {
             squarePanels[selectedSquare.getRow()][selectedSquare.getCol()].setSelected(false);
         }
         selectedSquare = null;
         repaint();
     }
 
-    // Methods for drag visuals
     public void setDraggedPiece(Piece piece, Point location) {
         if (piece != null) {
-            this.draggedPieceImage = PieceImageLoader.getImage(piece.getType(), piece.getColor());
+            this.draggedPieceImage = PieceImageLoader.getImage(piece);
         } else {
             this.draggedPieceImage = null;
         }
         this.draggedPieceLocation = location;
-        repaint(); // Trigger repaint to draw the dragged piece
+        repaint();
     }
 
     public void clearDraggedPiece() {
@@ -96,32 +99,9 @@ public class ChessBoardPanel extends JPanel {
         repaint();
     }
 
-
     @Override
     protected void paintComponent(Graphics g) {
-        super.paintComponent(g); // Paints the child SquarePanels
-
-        if (currentGameState == null) return;
-
-        // Draw pieces on top of squares
-        Board board = currentGameState.getBoard();
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                Piece piece = board.getPieceAt(r, c);
-                if (piece != null) {
-                    // Don't draw the piece being dragged at its original square
-                    boolean isBeingDragged = selectedSquare != null && selectedSquare.equals(new Position(r,c)) && draggedPieceImage != null;
-                    if (!isBeingDragged) {
-                        Image img = PieceImageLoader.getImage(piece.getType(), piece.getColor());
-                        if (img != null) {
-                            g.drawImage(img, c * getSquareWidth(), r * getSquareHeight(), getSquareWidth(), getSquareHeight(), this);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Draw the dragged piece at the mouse cursor location
+        super.paintComponent(g);
         if (draggedPieceImage != null && draggedPieceLocation != null) {
             int x = draggedPieceLocation.x - getSquareWidth() / 2;
             int y = draggedPieceLocation.y - getSquareHeight() / 2;
@@ -129,15 +109,9 @@ public class ChessBoardPanel extends JPanel {
         }
     }
 
-    public int getSquareWidth() {
-        return getWidth() / 8;
-    }
+    public int getSquareWidth() { return getWidth() / 8; }
+    public int getSquareHeight() { return getHeight() / 8; }
 
-    public int getSquareHeight() {
-        return getHeight() / 8;
-    }
-
-    // Helper to convert pixel coordinates to board position
     public Position getPositionFromPoint(Point point) {
         if (point == null) return null;
         int col = point.x / getSquareWidth();

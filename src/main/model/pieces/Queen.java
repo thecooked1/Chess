@@ -1,28 +1,42 @@
 package main.model.pieces;
-
-import main.model.*;
-
-import java.util.ArrayList;
-import java.util.List;
+import main.model.Board.Board;
 
 public class Queen extends Piece {
 
-    public Queen(Color color) {
-        super(color, PieceType.QUEEN);
+    public Queen(Colour colour) {
+        super(colour);
+        this.symbol = 'Q';
     }
 
     @Override
-    public List<Position> getPseudoLegalMoves(Board board, Position currentPosition) {
-        List<Position> moves = new ArrayList<>();
-        // Combine Rook and Bishop directions
-        int[][] directions = {
-                {0, 1}, {0, -1}, {1, 0}, {-1, 0}, // Rook moves
-                {1, 1}, {1, -1}, {-1, 1}, {-1, -1} // Bishop moves
-        };
-
-        for (int[] dir : directions) {
-            addMovesInDirection(moves, board, currentPosition, dir[0], dir[1]);
+    public boolean isValidMove(int fromRow, int fromCol, int toRow, int toCol, Board board) {
+        // Check Rook-like movement
+        boolean rookMove = false;
+        if (fromRow == toRow || fromCol == toCol) {
+            if (fromRow != toRow || fromCol != toCol) {
+                if(isPathClear(fromRow, fromCol, toRow, toCol, board)) {
+                    Piece target = board.getPiece(toRow, toCol);
+                    rookMove = (target == null || target.getColor() != this.colour);
+                }
+            }
         }
-        return moves;
+
+        // Check Bishop-like movement
+        boolean bishopMove = false;
+        if (Math.abs(toRow - fromRow) == Math.abs(toCol - fromCol)) {
+            if (fromRow != toRow || fromCol != toCol) {
+                if (isPathClear(fromRow, fromCol, toRow, toCol, board)) {
+                    Piece target = board.getPiece(toRow, toCol);
+                    bishopMove = (target == null || target.getColor() != this.colour);
+                }
+            }
+        }
+
+        return rookMove || bishopMove;
+    }
+
+    @Override
+    public char getSymbol() {
+        return symbol;
     }
 }

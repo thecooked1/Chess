@@ -1,24 +1,49 @@
 package main.model.pieces;
-
-import main.model.*;
-
-import java.util.ArrayList;
-import java.util.List;
+import main.model.Board.Board;
 
 public class Rook extends Piece {
 
-    public Rook(Color color) {
-        super(color, PieceType.ROOK);
+    private boolean hasMoved = false;
+
+    public Rook(Colour colour) {
+        super(colour);
+        this.symbol = 'R';
+        this.hasMoved = false;
+    }
+
+    public boolean hasMoved() {
+        return hasMoved;
+    }
+
+    public void setMoved(boolean moved) {
+        this.hasMoved = moved;
     }
 
     @Override
-    public List<Position> getPseudoLegalMoves(Board board, Position currentPosition) {
-        List<Position> moves = new ArrayList<>();
-        int[][] directions = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}}; // Right, Left, Down, Up
-
-        for (int[] dir : directions) {
-            addMovesInDirection(moves, board, currentPosition, dir[0], dir[1]);
+    public boolean isValidMove(int fromRow, int fromCol, int toRow, int toCol, Board board) {
+        // move
+        if (fromRow != toRow && fromCol != toCol) {
+            return false;
         }
-        return moves;
+        if (fromRow == toRow && fromCol == toCol) {
+            return false;
+        }
+
+        // Check if the path is clear using the helper method
+        if (!isPathClear(fromRow, fromCol, toRow, toCol, board)) {
+            return false;
+        }
+
+        Piece targetPiece = board.getPiece(toRow, toCol);
+        if (targetPiece == null) {
+            return true;
+        } else {
+            return targetPiece.getColor() != this.colour;
+        }
+    }
+
+    @Override
+    public char getSymbol() {
+        return symbol;
     }
 }
