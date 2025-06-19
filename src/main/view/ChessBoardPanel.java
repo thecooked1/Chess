@@ -1,6 +1,7 @@
 package main.view;
+
 import main.model.Board.Board;
-import main.model.Position;
+import main.model.Square; // Import the correct Square class
 import main.model.pieces.Piece;
 import javax.swing.*;
 import java.awt.*;
@@ -11,8 +12,8 @@ public class ChessBoardPanel extends JPanel {
 
     private final SquarePanel[][] squarePanels;
     private Board board;
-    private final Set<Position> highlightedSquares = new HashSet<>();
-    private Position selectedSquare = null;
+    private final Set<Square> highlightedSquares = new HashSet<>();
+    private Square selectedSquare = null;
 
     // For drag and drop visuals
     private Image draggedPieceImage = null;
@@ -22,7 +23,7 @@ public class ChessBoardPanel extends JPanel {
         setLayout(new GridLayout(8, 8));
         squarePanels = new SquarePanel[8][8];
         initializeBoardSquares();
-        setPreferredSize(new Dimension(400, 400));
+        setPreferredSize(new Dimension(500, 500)); // Increased size for better visuals
     }
 
     private void initializeBoardSquares() {
@@ -37,47 +38,53 @@ public class ChessBoardPanel extends JPanel {
     public void updateBoard(Board board) {
         this.board = board;
         if (board == null) return;
+
+        Square kingInCheck = board.getKingInCheckSquare();
+
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
-                Piece piece = board.getPiece(r, c);
+                Square currentSq = new Square(r, c);
+                Piece piece = board.getPiece(currentSq);
                 squarePanels[r][c].setPiece(piece);
+                // Set the special "in check" highlight for the king's square
+                squarePanels[r][c].setInCheck(currentSq.equals(kingInCheck));
             }
         }
         this.repaint();
     }
 
-    public void highlightLegalMoves(Set<Position> positions) {
+    public void highlightLegalMoves(Set<Square> squares) {
         clearHighlights();
-        highlightedSquares.addAll(positions);
-        for (Position pos : positions) {
-            squarePanels[pos.getRow()][pos.getCol()].setHighlighted(true);
+        highlightedSquares.addAll(squares);
+        for (Square sq : squares) {
+            squarePanels[sq.rank()][sq.file()].setHighlighted(true);
         }
         repaint();
     }
 
     public void clearHighlights() {
-        for (Position pos : highlightedSquares) {
-            if (this.board != null && this.board.isValidPosition(pos.getRow(), pos.getCol())) {
-                squarePanels[pos.getRow()][pos.getCol()].setHighlighted(false);
+        for (Square sq : highlightedSquares) {
+            // Check validity before accessing array to prevent rare errors
+            if (sq != null && sq.isValid()) {
+                squarePanels[sq.rank()][sq.file()].setHighlighted(false);
             }
         }
         highlightedSquares.clear();
         repaint();
     }
 
-    public void selectSquare(Position position) {
+    public void selectSquare(Square square) {
         clearSelection();
-        if (position != null && this.board != null && this.board.isValidPosition(position.getRow(), position.getCol())) {
-            selectedSquare = position;
-            squarePanels[position.getRow()][position.getCol()].setSelected(true);
+        if (square != null && square.isValid()) {
+            selectedSquare = square;
+            squarePanels[square.rank()][square.file()].setSelected(true);
         }
         repaint();
     }
 
-
     public void clearSelection() {
-        if (selectedSquare != null && this.board != null && this.board.isValidPosition(selectedSquare.getRow(), selectedSquare.getCol())) {
-            squarePanels[selectedSquare.getRow()][selectedSquare.getCol()].setSelected(false);
+        if (selectedSquare != null && selectedSquare.isValid()) {
+            squarePanels[selectedSquare.rank()][selectedSquare.file()].setSelected(false);
         }
         selectedSquare = null;
         repaint();
@@ -90,7 +97,7 @@ public class ChessBoardPanel extends JPanel {
             this.draggedPieceImage = null;
         }
         this.draggedPieceLocation = location;
-        repaint();
+        repaint(); // Repaint the whole panel to show the piece being dragged over other components
     }
 
     public void clearDraggedPiece() {
@@ -112,12 +119,13 @@ public class ChessBoardPanel extends JPanel {
     public int getSquareWidth() { return getWidth() / 8; }
     public int getSquareHeight() { return getHeight() / 8; }
 
-    public Position getPositionFromPoint(Point point) {
+
+    public Square getSquareFromPoint(Point point) {
         if (point == null) return null;
-        int col = point.x / getSquareWidth();
-        int row = point.y / getSquareHeight();
-        if (row >= 0 && row < 8 && col >= 0 && col < 8) {
-            return new Position(row, col);
+        int file = point.x / getSquareWidth();  // file is the column (x-axis)
+        int rank = point.y / getSquareHeight(); // rank is the row (y-axis)
+        if (rank >= 0 && rank < 8 && file >= 0 && file < 8) {
+            return new Square(rank, file);
         }
         return null;
     }

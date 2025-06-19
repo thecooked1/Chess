@@ -1,38 +1,31 @@
 package main.model.pieces;
+
 import main.model.Board.Board;
+import main.model.Square;
 
 public class King extends Piece {
-
-    private boolean hasMoved = false;
 
     public King(Colour colour) {
         super(colour);
         this.symbol = 'K';
-        this.hasMoved = false;
-    }
-
-    public boolean hasMoved() {
-        return hasMoved;
-    }
-
-    public void setMoved(boolean moved) {
-        this.hasMoved = moved;
     }
 
     @Override
-    public boolean isValidMove(int fromRow, int fromCol, int toRow, int toCol, Board board) {
-        int rowDiff = Math.abs(fromRow - toRow);
-        int colDiff = Math.abs(fromCol - toCol);
+    public boolean isValidMove(Square from, Square to, Board board) {
+        int rankDiff = Math.abs(from.rank() - to.rank());
+        int fileDiff = Math.abs(from.file() - to.file());
 
-        // King move
-        if (rowDiff <= 1 && colDiff <= 1 && (rowDiff != 0 || colDiff != 0)) {
-            Piece targetPiece = board.getPiece(toRow, toCol);
-            if (targetPiece == null) {
-                return true;
-            } else {
-                return targetPiece.getColor() != this.colour; // Can capture opponent's piece
-            }
+        // Standard 1-square move
+        if (rankDiff <= 1 && fileDiff <= 1) {
+            // Ensure it's not the same square
+            return !from.equals(to);
         }
+
+        // Castling move attempt (King moves two squares horizontally)
+        if (rankDiff == 0 && fileDiff == 2) {
+            return true;
+        }
+
         return false;
     }
 

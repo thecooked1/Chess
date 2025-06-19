@@ -1,45 +1,28 @@
 package main.model.pieces;
+
 import main.model.Board.Board;
+import main.model.Square;
 
 public class Rook extends Piece {
-
-    private boolean hasMoved = false;
 
     public Rook(Colour colour) {
         super(colour);
         this.symbol = 'R';
-        this.hasMoved = false;
-    }
-
-    public boolean hasMoved() {
-        return hasMoved;
-    }
-
-    public void setMoved(boolean moved) {
-        this.hasMoved = moved;
     }
 
     @Override
-    public boolean isValidMove(int fromRow, int fromCol, int toRow, int toCol, Board board) {
-        // move
-        if (fromRow != toRow && fromCol != toCol) {
-            return false;
-        }
-        if (fromRow == toRow && fromCol == toCol) {
+    public boolean isValidMove(Square from, Square to, Board board) {
+        // Rooks move in straight lines
+        if (from.rank() != to.rank() && from.file() != to.file()) {
             return false;
         }
 
-        // Check if the path is clear using the helper method
-        if (!isPathClear(fromRow, fromCol, toRow, toCol, board)) {
+        // Check if the path between the squares is clear of other pieces.
+        if (!isPathClear(from, to, board)) {
             return false;
         }
 
-        Piece targetPiece = board.getPiece(toRow, toCol);
-        if (targetPiece == null) {
-            return true;
-        } else {
-            return targetPiece.getColor() != this.colour;
-        }
+        return true;
     }
 
     @Override

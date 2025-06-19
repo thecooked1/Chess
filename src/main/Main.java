@@ -1,15 +1,13 @@
 package main;
 
 import main.controller.GameController;
-import main.view.StartMenu;
 
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
-public class Game {
+public class Main {
 
     public static void main(String[] args) {
-        // Set look and feel (optional, makes UI look more native)
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
@@ -18,8 +16,6 @@ public class Game {
 
         SwingUtilities.invokeLater(() -> {
              new GameController();
-
-
         });
     }
 }

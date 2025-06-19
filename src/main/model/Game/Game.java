@@ -1,74 +1,66 @@
 package main.model.Game;
+
 import main.model.Board.Board;
 import main.model.PGNParser.Interpreter;
 import main.model.PGNParser.Move;
 import main.model.PGNParser.Parser;
 import java.util.List;
-import java.util.Map;
+
 
 public class Game {
     private final Interpreter interpreter = new Interpreter();
 
     public boolean playGame(Parser.PGNGame game, int gameNumber) {
-        Board board = new Board(); // Reset board
-        boolean whiteToMove = true;
+        Board board = new Board();
         List<String> moveTokens = game.getMoves();
         int moveNumber = 1;
-        int halfMoveClock = 0;
 
-        System.out.println("=== Playing Game #" + gameNumber + " ===");
+        System.out.println("\n=== Playing Game #" + gameNumber + " ===");
         System.out.println("White: " + game.getHeaders().getOrDefault("White", "Unknown"));
         System.out.println("Black: " + game.getHeaders().getOrDefault("Black", "Unknown"));
-        System.out.println("Event: " + game.getHeaders().getOrDefault("Event", "Unknown"));
+        System.out.println("Result: " + game.getResult());
+        System.out.println("---------------------------------");
 
         board.printBoard();
 
         try {
             for (String token : moveTokens) {
-                Move move = null;
-                // Parsing phase
+                // Determine whose turn it is BEFORE the move
+                String player = board.getTurn().toString();
+                String moveNumStr = (board.getTurn() == main.model.pieces.Colour.WHITE) ? moveNumber + "." : moveNumber + "...";
+                System.out.println(moveNumStr + " " + player + " plays " + token);
+
+                Move move;
                 try {
                     move = interpreter.parseMove(token);
                 } catch (IllegalArgumentException e) {
-                    System.err.println("\nERROR in Game #" + gameNumber + " (Move " + moveNumber + " " + (whiteToMove ? "White" : "Black") + "):");
+                    System.err.println("\nERROR in Game #" + gameNumber + " (" + player + " move):");
                     System.err.println("Failed to parse move token: '" + token + "'");
-                    System.err.println("Reason: " + e.getMessage());
                     return false;
                 }
 
-                // Game Replay Phase
-                String player = whiteToMove ? "White" : "Black";
-                String moveNumStr = whiteToMove ? moveNumber + "." : moveNumber + "...";
-                System.out.println(moveNumStr + " " + player + ": " + token);
-                boolean moveApplied = board.applyMove(move, whiteToMove);
-                // board.printBoard();
+                boolean moveApplied = board.applyMove(move);
+                board.printBoard(); // Print board after each move
 
                 if (!moveApplied) {
-                    System.err.println("\nERROR in Game #" + gameNumber + " (Move " + moveNumber + " " + player + "):");
-                    System.err.println("Illegal move detected for token: '" + token + "'");
-                    // board.printBoard();
+                    System.err.println("\nERROR: Board rejected the illegal move '" + token + "'");
                     return false;
                 }
 
-
-                whiteToMove = !whiteToMove;
-                if (whiteToMove) {
+                // Increment move number after Black has moved.
+                if (board.getTurn() == main.model.pieces.Colour.WHITE) {
                     moveNumber++;
                 }
-                halfMoveClock++;
             }
-
         } catch (Exception e) {
-
-            System.err.println("\nUNEXPECTED ERROR in Game #" + gameNumber + " around move: " + moveNumber + " (" + (whiteToMove ? "White" : "Black") + ")");
-            System.err.println("Move token being processed: '" + (moveTokens.size() > halfMoveClock ? moveTokens.get(halfMoveClock) : "N/A") + "'");
-            System.err.println("Error message: " + e.getMessage());
+            System.err.println("\nUNEXPECTED CRITICAL ERROR in Game #" + gameNumber);
             e.printStackTrace();
             return false;
         }
-        board.printBoard();
 
-        System.out.println("Game #" + gameNumber + " finished successfully. Result: " + game.getResult() + '\n');
+        System.out.println("\nGame #" + gameNumber + " finished successfully. Final Board:");
+        board.printBoard();
+        System.out.println("Expected Result: " + game.getResult() + '\n');
         return true;
     }
 
@@ -86,7 +78,7 @@ public class Game {
             boolean gamePlayedSuccessfully = playGame(game, gameIndex);
 
             if (!gamePlayedSuccessfully) {
-                System.err.println("--- Game #" + gameIndex + " aborted due to error. Skipping to next game. ---");
+                System.err.println("--- Game #" + gameIndex + " aborted due to error. ---");
                 failedGames++;
             } else {
                 successfulGames++;

@@ -1,5 +1,7 @@
 package main.model.pieces;
+
 import main.model.Board.Board;
+import main.model.Square;
 
 public class Bishop extends Piece {
 
@@ -9,27 +11,18 @@ public class Bishop extends Piece {
     }
 
     @Override
-    public boolean isValidMove(int fromRow, int fromCol, int toRow, int toCol, Board board) {
-        // Must move diagonally
-        if (Math.abs(toRow - fromRow) != Math.abs(toCol - fromCol)) {
-            return false;
-        }
-        if (fromRow == toRow && fromCol == toCol) {
+    public boolean isValidMove(Square from, Square to, Board board) {
+        // Bishops move diagonally
+        if (Math.abs(from.rank() - to.rank()) != Math.abs(from.file() - to.file())) {
             return false;
         }
 
-        // Check if the path is clear
-        if (!isPathClear(fromRow, fromCol, toRow, toCol, board)) {
+        // Check if the path between the squares is clear of other pieces.
+        if (!isPathClear(from, to, board)) {
             return false;
         }
 
-        // Check the target square
-        Piece targetPiece = board.getPiece(toRow, toCol);
-        if (targetPiece == null) {
-            return true;
-        } else {
-            return targetPiece.getColor() != this.colour; // Can capture opponent's piece
-        }
+        return true;
     }
 
     @Override

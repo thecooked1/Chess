@@ -1,6 +1,6 @@
 package main.view;
 
-// Data class to hold game settings from StartMenu
+
 public class GameSettings {
     public final String whiteName;
     public final String blackName;

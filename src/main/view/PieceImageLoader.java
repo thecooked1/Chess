@@ -13,9 +13,6 @@ public class PieceImageLoader {
     private static final Map<String, Image> imageCache = new HashMap<>();
     private static final String RESOURCE_PATH = "/";
 
-    /**
-     * The primary method to get an image for a given piece object.
-     */
     public static Image getImage(Piece piece) {
         if (piece == null) return null;
 
@@ -43,9 +40,7 @@ public class PieceImageLoader {
         return imageCache.get(key);
     }
 
-    /**
-     * Internal helper to load an image from resources and cache it.
-     */
+
     private static void loadImage(String key, String fileName) {
         try {
             String fullPath = RESOURCE_PATH + fileName;
@@ -63,9 +58,6 @@ public class PieceImageLoader {
         }
     }
 
-    /**
-     * Helper for getting the application icon image.
-     */
     public static Image getApplicationIcon() {
         // Create a temporary white pawn to get its image
         return getImage(new Pawn(Colour.WHITE));

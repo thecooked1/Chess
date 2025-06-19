@@ -1,5 +1,7 @@
 package main.model.pieces;
+
 import main.model.Board.Board;
+import main.model.Square;
 
 public class Queen extends Piece {
 
@@ -9,30 +11,20 @@ public class Queen extends Piece {
     }
 
     @Override
-    public boolean isValidMove(int fromRow, int fromCol, int toRow, int toCol, Board board) {
-        // Check Rook-like movement
-        boolean rookMove = false;
-        if (fromRow == toRow || fromCol == toCol) {
-            if (fromRow != toRow || fromCol != toCol) {
-                if(isPathClear(fromRow, fromCol, toRow, toCol, board)) {
-                    Piece target = board.getPiece(toRow, toCol);
-                    rookMove = (target == null || target.getColor() != this.colour);
-                }
-            }
+    public boolean isValidMove(Square from, Square to, Board board) {
+        // Check for straight-line movement (like a Rook)
+        boolean isRookMove = from.rank() == to.rank() || from.file() == to.file();
+
+        // Check for diagonal movement (like a Bishop)
+        boolean isBishopMove = Math.abs(from.rank() - to.rank()) == Math.abs(from.file() - to.file());
+
+        // If the move is neither straight nor diagonal, it's invalid for a Queen.
+        if (!isRookMove && !isBishopMove) {
+            return false;
         }
 
-        // Check Bishop-like movement
-        boolean bishopMove = false;
-        if (Math.abs(toRow - fromRow) == Math.abs(toCol - fromCol)) {
-            if (fromRow != toRow || fromCol != toCol) {
-                if (isPathClear(fromRow, fromCol, toRow, toCol, board)) {
-                    Piece target = board.getPiece(toRow, toCol);
-                    bishopMove = (target == null || target.getColor() != this.colour);
-                }
-            }
-        }
-
-        return rookMove || bishopMove;
+        // check if the path is clear.
+        return isPathClear(from, to, board);
     }
 
     @Override

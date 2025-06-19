@@ -21,7 +21,6 @@ public class StartMenu implements Runnable {
         startWindow.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         startWindow.setResizable(false);
 
-        // ... (The top part of the method is mostly fine) ...
         Box components = Box.createVerticalBox();
         startWindow.add(components);
         components.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -38,9 +37,8 @@ public class StartMenu implements Runnable {
         gbc.insets = new Insets(5, 5, 5, 5);
         gbc.anchor = GridBagConstraints.WEST;
 
-        // --- White Player (Corrected) ---
+        // --- White Player ---
         gbc.gridx = 0; gbc.gridy = 0;
-        // Use the new, type-safe method
         JLabel whiteIconLabel = createIconLabel(Colour.WHITE);
         playerPanel.add(whiteIconLabel, gbc);
 
@@ -52,9 +50,8 @@ public class StartMenu implements Runnable {
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0.0;
 
-        // --- Black Player (Corrected) ---
+        // --- Black Player  ---
         gbc.gridx = 0; gbc.gridy = 1;
-        // Use the new, type-safe method
         JLabel blackIconLabel = createIconLabel(Colour.BLACK);
         playerPanel.add(blackIconLabel, gbc);
 
@@ -69,8 +66,6 @@ public class StartMenu implements Runnable {
         components.add(playerPanel);
         components.add(Box.createVerticalStrut(10));
 
-        // --- The rest of the run() method is unchanged and correct ---
-        // (Timer panel, buttons, action listeners, etc.)
         JPanel timerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
         timerPanel.setBorder(BorderFactory.createTitledBorder("Time Control (HH:MM:SS)"));
         final String[] minSecInts = new String[60];
@@ -122,14 +117,13 @@ public class StartMenu implements Runnable {
         startWindow.setVisible(true);
     }
 
-    // --- CORRECTED Helper to create icon label ---
+    // --- Helper to create icon label ---
     private JLabel createIconLabel(Colour color) {
         try {
             // Create a temporary Pawn of the given color to get its image
             Image img = PieceImageLoader.getImage(new Pawn(color));
 
             if (img != null) {
-                // Return a label with a scaled-down version of the image
                 return new JLabel(new ImageIcon(img.getScaledInstance(20, 20, Image.SCALE_SMOOTH)));
             }
         } catch (Exception e) {

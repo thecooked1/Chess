@@ -1,5 +1,6 @@
 package main.model.pieces;
 import main.model.Board.Board;
+import main.model.Square;
 
 
 public abstract class Piece {
@@ -25,7 +26,7 @@ public abstract class Piece {
 
 
 
-    public abstract boolean isValidMove(int fromRow, int fromCol, int toRow, int toCol, Board board);
+    public abstract boolean isValidMove(Square from, Square to, Board board);
     public abstract char getSymbol();
 
     @Override
@@ -34,16 +35,13 @@ public abstract class Piece {
     }
 
     // Helper method
-    protected boolean isPathClear(int r1, int c1, int r2, int c2, Board board) {
-        int dr = Integer.compare(r2, r1);
-        int dc = Integer.compare(c2, c1);
-
-        int r = r1 + dr;
-        int c = c1 + dc;
-
-        while (r != r2 || c != c2) {
-            if (!board.isValidPosition(r, c)) return false;
-            if (board.getPiece(r, c) != null) {
+    protected boolean isPathClear(Square from, Square to, Board board) {
+        int dr = Integer.compare(to.rank(), from.rank());
+        int dc = Integer.compare(to.file(), from.file());
+        int r = from.rank() + dr;
+        int c = from.file() + dc;
+        while (r != to.rank() || c != to.file()) {
+            if (board.getPiece(new Square(r, c)) != null) {
                 return false;
             }
             r += dr;

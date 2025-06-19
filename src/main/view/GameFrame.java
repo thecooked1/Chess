@@ -1,9 +1,8 @@
 package main.view;
 
-// Corrected Imports
 import main.model.pieces.Colour;
 import main.model.pieces.Piece;
-import main.model.pieces.*; // Queen, Rook, etc. for promotion
+import main.model.pieces.*;
 
 import javax.swing.*;
 import java.awt.*;
@@ -12,13 +11,13 @@ import java.util.Map;
 
 public class GameFrame extends JFrame {
 
-    // --- All GUI Components Declared as final ---
+
     private final ChessBoardPanel chessBoardPanel;
     private final JLabel statusLabel;
     private final JLabel whitePlayerLabel;
     private final JLabel blackPlayerLabel;
-    private final JLabel whiteClockLabel; // The variable from your error
-    private final JLabel blackClockLabel; // The variable from your error
+    private final JLabel whiteClockLabel;
+    private final JLabel blackClockLabel;
     private final JButton quitButton;
 
     // PGN and Replay components
@@ -51,14 +50,12 @@ public class GameFrame extends JFrame {
         JPanel infoPanel = new JPanel(new GridLayout(3, 2, 5, 5)); // 3 rows, 2 columns
         infoPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        // All labels are initialized here, inside the constructor
         whitePlayerLabel = new JLabel("White: Player 1");
         blackPlayerLabel = new JLabel("Black: Player 2");
         whiteClockLabel = new JLabel("Time: 00:00:00");
         blackClockLabel = new JLabel("Time: 00:00:00");
         statusLabel = new JLabel("White's turn to move.");
 
-        // Center align text
         whitePlayerLabel.setHorizontalAlignment(SwingConstants.CENTER);
         blackPlayerLabel.setHorizontalAlignment(SwingConstants.CENTER);
         whiteClockLabel.setHorizontalAlignment(SwingConstants.CENTER);
@@ -66,13 +63,11 @@ public class GameFrame extends JFrame {
         statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
         statusLabel.setFont(statusLabel.getFont().deriveFont(Font.BOLD));
 
-        // Add components to the panel
         infoPanel.add(whitePlayerLabel);
         infoPanel.add(blackPlayerLabel);
         infoPanel.add(whiteClockLabel);
         infoPanel.add(blackClockLabel);
 
-        // Use a separate panel for the status label to span columns
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.add(infoPanel, BorderLayout.CENTER);
         topPanel.add(statusLabel, BorderLayout.SOUTH);
@@ -98,13 +93,11 @@ public class GameFrame extends JFrame {
         setLocationRelativeTo(null);
     }
 
-    // --- Getters for Controller to access components ---
     public ChessBoardPanel getChessBoardPanel() { return chessBoardPanel; }
     public JMenuItem getLoadPgnMenuItem() { return loadPgnMenuItem; }
     public JButton getNextMoveButton() { return nextMoveButton; }
     public JButton getPrevMoveButton() { return prevMoveButton; }
 
-    // --- Methods for Controller to update the View ---
     public void setStatus(String text) { statusLabel.setText(text); }
     public void updatePlayerInfo(Map<String, String> headers) {
         whitePlayerLabel.setText("White: " + headers.getOrDefault("White", "Unknown"));
@@ -132,7 +125,6 @@ public class GameFrame extends JFrame {
         JOptionPane.showMessageDialog(this, message, title, JOptionPane.INFORMATION_MESSAGE);
     }
 
-    // The corrected promotion dialog
     public String askPromotionChoice() {
         Piece[] promotionPieces = { new Queen(Colour.WHITE), new Rook(Colour.WHITE), new Bishop(Colour.WHITE), new Knight(Colour.WHITE) };
         ImageIcon[] icons = new ImageIcon[promotionPieces.length];

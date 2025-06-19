@@ -1,5 +1,7 @@
 package main.model.pieces;
+
 import main.model.Board.Board;
+import main.model.Square;
 
 public class Pawn extends Piece {
 
@@ -9,38 +11,45 @@ public class Pawn extends Piece {
     }
 
     @Override
-    public boolean isValidMove(int fromRow, int fromCol, int toRow, int toCol, Board board) {
-        int direction = (colour == Colour.WHITE) ? -1 : 1;
-        int startRankRow = (colour == Colour.WHITE) ? 6 : 1;
-        Piece targetPiece = board.getPiece(toRow, toCol);
-        // Single move forward
-        if (fromCol == toCol && toRow == fromRow + direction && targetPiece == null) {
+    public boolean isValidMove(Square from, Square to, Board board) {
+        // Determine pawn's direction of movement based on its color.
+        int direction = (this.colour == Colour.WHITE) ? -1 : 1;
+        int startRank = (this.colour == Colour.WHITE) ? 6 : 1;
+
+        Piece targetPiece = board.getPiece(to);
+        int rankDiff = to.rank() - from.rank();
+        int fileDiff = to.file() - from.file();
+
+        // --- Case 1: Standard 1-square forward move ---
+        if (fileDiff == 0 && rankDiff == direction && targetPiece == null) {
             return true;
         }
 
-        // Double move forward
-        if (fromCol == toCol && fromRow == startRankRow && toRow == fromRow + 2 * direction
-                && targetPiece == null
-                && board.getPiece(fromRow + direction, fromCol) == null) {
-            return true;
+        // --- Case 2: Double-square forward move from starting rank ---
+        if (from.rank() == startRank && fileDiff == 0 && rankDiff == 2 * direction && targetPiece == null) {
+            // Check that the square being jumped over is also empty
+            Square jumpedSquare = new Square(from.rank() + direction, from.file());
+            if (board.getPiece(jumpedSquare) == null) {
+                return true;
+            }
         }
 
-        // Capture
-        if (Math.abs(toCol - fromCol) == 1 && toRow == fromRow + direction && targetPiece != null
-                && targetPiece.getColor() != this.colour) {
-            return true;
+        // --- Case 3: Standard diagonal capture ---
+        if (Math.abs(fileDiff) == 1 && rankDiff == direction && targetPiece != null) {
+            return targetPiece.getColor() != this.colour;
         }
 
-        //  En Passant Capture
-        int[] enPassantTarget = board.getEnPassantTarget(); // Get potential target {row, col}
-        if (enPassantTarget != null
-                && Math.abs(toCol - fromCol) == 1 // Moving diagonally
-                && toRow == fromRow + direction    // Moving one step forward direction-wise
-                && targetPiece == null            // Target square *must* be empty for en passant
-                && toRow == enPassantTarget[0]    // Target row must match en passant row
-                && toCol == enPassantTarget[1]) { // Target col must match en passant col
-            return true;
+        // --- Case 4: En Passant capture ---
+        Square enPassantTarget = board.getEnPassantTargetSquare();
+        if (enPassantTarget != null && to.equals(enPassantTarget)) {
+            // Verify it's a diagonal move to the en passant square
+            if (Math.abs(fileDiff) == 1 && rankDiff == direction) {
+                // The target square must be empty for an en passant capture
+                return targetPiece == null;
+            }
         }
+
+        // the move is invalid.
         return false;
     }
 
