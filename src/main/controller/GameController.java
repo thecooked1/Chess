@@ -10,7 +10,7 @@ import main.model.pieces.Pawn;
 import main.model.pieces.Piece;
 import main.view.ChessBoardPanel;
 import main.view.GameFrame;
-
+import main.model.Clock;
 import javax.swing.*;
 import java.awt.Point;
 import java.awt.event.MouseAdapter;
@@ -27,6 +27,9 @@ public class GameController {
     private final GameFrame view;
     private final Board board;
     private final Interpreter pgnInterpreter;
+    private final Clock whiteClock;
+    private final Clock blackClock;
+    private final Timer swingTimer;
 
     private Square selectedSquare = null; // The currently selected square for a user move
 
@@ -41,14 +44,42 @@ public class GameController {
         this.view = new GameFrame();
         this.pgnInterpreter = new Interpreter();
 
+        this.whiteClock = new Clock(0, 10, 0);
+        this.blackClock = new Clock(0, 10, 0);
+        this.swingTimer = new Timer(1000, e -> updateClocks());
+
         // 2. Connect Controller to View (add event listeners)
         this.initListeners();
 
         // 3. Initial display update
         this.updateView();
 
+        this.swingTimer.start();
+
         // 4. Make the application visible
         this.view.setVisible(true);
+    }
+
+    private void updateClocks() {
+        if (board.getTurn() == Colour.WHITE) {
+            if (whiteClock.decrement()) {
+                handleTimeout(Colour.BLACK); // Black wins if White's time runs out
+            }
+        } else {
+            if (blackClock.decrement()) {
+                handleTimeout(Colour.WHITE); // White wins if Black's time runs out
+            }
+        }
+        // Update the labels in the view
+        view.updateClock(Colour.WHITE, whiteClock.getTime());
+        view.updateClock(Colour.BLACK, blackClock.getTime());
+    }
+
+    private void handleTimeout(Colour winner) {
+        swingTimer.stop(); // Stop the clock
+        view.setStatus("Time's up! " + winner + " wins.");
+        // Optionally, disable the board or show a game over dialog
+        view.showGameOverDialog("Time's up! " + winner + " wins.", "Game Over");
     }
 
     private void initListeners() {
@@ -173,6 +204,18 @@ public class GameController {
         // Update the visual board
         view.getChessBoardPanel().updateBoard(board);
 
+        if (board.getTurn() == Colour.WHITE) {
+            whiteClock.start();
+            blackClock.stop();
+        } else {
+            whiteClock.stop();
+            blackClock.start();
+        }
+        // Update the clock labels immediately after a move
+        view.updateClock(Colour.WHITE, whiteClock.getTime());
+        view.updateClock(Colour.BLACK, blackClock.getTime());
+
+
         // Update the status label (Check, Checkmate, Stalemate, Whose turn)
         Colour currentTurn = board.getTurn();
         String status;
@@ -182,12 +225,14 @@ public class GameController {
                 status = "Check! " + currentTurn + "'s turn.";
             } else {
                 status = "Checkmate! " + (currentTurn == Colour.WHITE ? "Black" : "White") + " wins.";
+                swingTimer.stop();
             }
         } else {
             if (board.hasAnyLegalMoves(currentTurn)) {
                 status = currentTurn + "'s turn.";
             } else {
                 status = "Stalemate! It's a draw.";
+                swingTimer.stop();
             }
         }
         view.setStatus(status);
