@@ -19,6 +19,7 @@ public class GameFrame extends JFrame {
     private final JLabel whiteClockLabel;
     private final JLabel blackClockLabel;
     private final JButton quitButton;
+    private final JMenuItem newGameMenuItem;
 
     // PGN and Replay components
     private final JMenuItem loadPgnMenuItem;
@@ -37,6 +38,7 @@ public class GameFrame extends JFrame {
         // --- Create Menu Bar ---
         JMenuBar menuBar = new JMenuBar();
         JMenu fileMenu = new JMenu("File");
+        newGameMenuItem = new JMenuItem("New Game");
         loadPgnMenuItem = new JMenuItem("Load PGN..."); // Initialization
         fileMenu.add(loadPgnMenuItem);
         menuBar.add(fileMenu);
@@ -91,6 +93,12 @@ public class GameFrame extends JFrame {
         pack();
         setMinimumSize(getPreferredSize());
         setLocationRelativeTo(null);
+        pack();
+    }
+
+
+    public JMenuItem getNewGameMenuItem() {
+        return newGameMenuItem;
     }
 
     public ChessBoardPanel getChessBoardPanel() { return chessBoardPanel; }

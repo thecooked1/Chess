@@ -2,17 +2,17 @@ package main.view;
 
 
 public class GameSettings {
-    public final String whiteName;
-    public final String blackName;
-    public final int hours;
-    public final int minutes;
-    public final int seconds;
+    public final String whitePlayerName;
+    public final String blackPlayerName;
+    public final int initialHours;
+    public final int initialMinutes;
+    public final int initialSeconds;
 
-    GameSettings(String wn, String bn, int h, int m, int s) {
-        whiteName = wn;
-        blackName = bn;
-        hours = h;
-        minutes = m;
-        seconds = s;
+    public GameSettings(String whitePlayerName, String blackPlayerName, int hours, int minutes, int seconds) {
+        this.whitePlayerName = whitePlayerName;
+        this.blackPlayerName = blackPlayerName;
+        this.initialHours = hours;
+        this.initialMinutes = minutes;
+        this.initialSeconds = seconds;
     }
 }

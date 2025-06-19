@@ -10,17 +10,15 @@ import main.model.pieces.Pawn;
 import main.model.pieces.Piece;
 import main.view.ChessBoardPanel;
 import main.view.GameFrame;
+import main.view.GameSettings;
 import main.model.Clock;
 import javax.swing.*;
+import javax.swing.Timer;
 import java.awt.Point;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-
+import java.util.*;
 
 public class GameController {
 
@@ -30,59 +28,38 @@ public class GameController {
     private final Clock whiteClock;
     private final Clock blackClock;
     private final Timer swingTimer;
+    private final GameSettings gameSettings;
 
-    private Square selectedSquare = null; // The currently selected square for a user move
 
-    // State for PGN Replay
+    private Square selectedSquare = null;
     private List<String> pgnMoveTokens;
     private int currentPgnMoveIndex;
     private boolean inReplayMode = false;
 
-    public GameController() {
-        // 1. Create the Model and the View
+    public GameController(GameSettings settings) {
+        this.gameSettings = settings;
         this.board = new Board();
         this.view = new GameFrame();
         this.pgnInterpreter = new Interpreter();
 
-        this.whiteClock = new Clock(0, 10, 0);
-        this.blackClock = new Clock(0, 10, 0);
+        this.whiteClock = new Clock(settings.initialHours, settings.initialMinutes, settings.initialSeconds);
+        this.blackClock = new Clock(settings.initialHours, settings.initialMinutes, settings.initialSeconds);
         this.swingTimer = new Timer(1000, e -> updateClocks());
 
-        // 2. Connect Controller to View (add event listeners)
         this.initListeners();
 
-        // 3. Initial display update
+        Map<String, String> playerNames = new HashMap<>();
+        playerNames.put("White", settings.whitePlayerName);
+        playerNames.put("Black", settings.blackPlayerName);
+        this.view.updatePlayerInfo(playerNames);
+
         this.updateView();
-
         this.swingTimer.start();
-
-        // 4. Make the application visible
         this.view.setVisible(true);
     }
 
-    private void updateClocks() {
-        if (board.getTurn() == Colour.WHITE) {
-            if (whiteClock.decrement()) {
-                handleTimeout(Colour.BLACK); // Black wins if White's time runs out
-            }
-        } else {
-            if (blackClock.decrement()) {
-                handleTimeout(Colour.WHITE); // White wins if Black's time runs out
-            }
-        }
-        // Update the labels in the view
-        view.updateClock(Colour.WHITE, whiteClock.getTime());
-        view.updateClock(Colour.BLACK, blackClock.getTime());
-    }
-
-    private void handleTimeout(Colour winner) {
-        swingTimer.stop(); // Stop the clock
-        view.setStatus("Time's up! " + winner + " wins.");
-        // Optionally, disable the board or show a game over dialog
-        view.showGameOverDialog("Time's up! " + winner + " wins.", "Game Over");
-    }
-
     private void initListeners() {
+        this.view.getNewGameMenuItem().addActionListener(e -> handleNewGame());
         this.view.getLoadPgnMenuItem().addActionListener(e -> handleLoadPgn());
         this.view.getNextMoveButton().addActionListener(e -> handlePgnNextMove());
         this.view.getPrevMoveButton().addActionListener(e -> handlePgnPrevMove());
@@ -93,35 +70,54 @@ public class GameController {
         this.view.getChessBoardPanel().addMouseMotionListener(mouseListener);
     }
 
+    private void updateClocks() {
+        if (board.getTurn() == Colour.WHITE) {
+            if (whiteClock.decrement()) {
+                handleTimeout(Colour.BLACK);
+            }
+        } else {
+            if (blackClock.decrement()) {
+                handleTimeout(Colour.WHITE);
+            }
+        }
+        view.updateClock(Colour.WHITE, whiteClock.getTime());
+        view.updateClock(Colour.BLACK, blackClock.getTime());
+    }
+
+
+    private void handleNewGame() {
+        swingTimer.stop();
+        view.dispose();
+        main.Main.launchStartMenu();
+    }
+
+    private void handleTimeout(Colour winner) {
+        swingTimer.stop(); // Stop the clock
+        view.setStatus("Time's up! " + winner + " wins.");
+        view.showGameOverDialog("Time's up! " + winner + " wins.", "Game Over");
+    }
+
     private void handleLoadPgn() {
+        // Logic for loading PGN files remains useful
         JFileChooser fileChooser = new JFileChooser("./");
         int result = fileChooser.showOpenDialog(view);
-
         if (result == JFileChooser.APPROVE_OPTION) {
             try {
                 File pgnFile = fileChooser.getSelectedFile();
                 Parser pgnParser = new Parser();
                 pgnParser.loadPGN(pgnFile);
-
                 if (pgnParser.getGames().isEmpty()) {
                     JOptionPane.showMessageDialog(view, "No games found in the PGN file.", "Parsing Error", JOptionPane.WARNING_MESSAGE);
                     return;
                 }
-
-                // Prepare for replay
                 Parser.PGNGame firstGame = pgnParser.getGames().get(0);
                 this.pgnMoveTokens = firstGame.getMoves();
-                this.currentPgnMoveIndex = -1; // -1 means the start position
+                this.currentPgnMoveIndex = -1;
                 this.inReplayMode = true;
-
-                // Reset the board engine to the initial position
-                this.board.setupInitialPosition();
-
-                // Update the GUI
-                this.view.updatePlayerInfo(firstGame.getHeaders());
-                this.view.enableReplayControls(true);
-                updateView(); // Update board and status
-
+                board.setupInitialPosition();
+                view.updatePlayerInfo(firstGame.getHeaders());
+                view.enableReplayControls(true);
+                updateView();
             } catch (Exception ex) {
                 ex.printStackTrace();
                 JOptionPane.showMessageDialog(view, "Failed to load or parse PGN file: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -130,60 +126,35 @@ public class GameController {
     }
 
     private void handlePgnNextMove() {
-        if (!inReplayMode || currentPgnMoveIndex >= pgnMoveTokens.size() - 1) {
-            return; // No more moves
-        }
-
+        if (!inReplayMode || currentPgnMoveIndex >= pgnMoveTokens.size() - 1) return;
         currentPgnMoveIndex++;
         String moveToken = pgnMoveTokens.get(currentPgnMoveIndex);
-
         try {
             Move pgnMove = pgnInterpreter.parseMove(moveToken);
-            boolean success = board.applyMove(pgnMove);
-
-            if (!success) {
-                String errorMsg = "Illegal move encountered during replay: " + moveToken;
-                JOptionPane.showMessageDialog(view, errorMsg, "Illegal Move", JOptionPane.ERROR_MESSAGE);
-            }
+            board.applyMove(pgnMove);
             updateView();
         } catch (Exception e) {
-            String errorMsg = "Error parsing move token: " + moveToken;
             e.printStackTrace();
-            JOptionPane.showMessageDialog(view, errorMsg, "Parsing Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
     private void handlePgnPrevMove() {
-        if (!inReplayMode || currentPgnMoveIndex < 0) {
-            return;
-        }
-
+        if (!inReplayMode || currentPgnMoveIndex < 0) return;
         currentPgnMoveIndex--;
-        board.setupInitialPosition(); // Reset to start
-
-        // Replay all moves up to the new current index
+        board.setupInitialPosition();
         for (int i = 0; i <= currentPgnMoveIndex; i++) {
-            String moveToken = pgnMoveTokens.get(i);
             try {
-                Move pgnMove = pgnInterpreter.parseMove(moveToken);
+                Move pgnMove = pgnInterpreter.parseMove(pgnMoveTokens.get(i));
                 board.applyMove(pgnMove);
-            } catch (Exception e) {
-                // Should not happen if PGN was valid
-                break;
-            }
+            } catch (Exception e) { break; }
         }
         updateView();
     }
 
     private void attemptUserMove(Square start, Square end) {
-        // Ask the model for the list of legal moves for the selected piece.
         List<Square> legalMoves = board.getLegalMovesForPiece(start);
-
-        // If the intended destination is in the list, proceed.
         if (legalMoves.contains(end)) {
             Optional<String> promotionChoice = Optional.empty();
-
-            // Check if this move is a promotion
             Piece movingPiece = board.getPiece(start);
             if (movingPiece instanceof Pawn) {
                 int promotionRank = (movingPiece.getColor() == Colour.WHITE) ? 0 : 7;
@@ -191,32 +162,29 @@ public class GameController {
                     promotionChoice = Optional.of(view.askPromotionChoice());
                 }
             }
-
-            // Tell the model to apply the move.
             board.applyMove(start, end, promotionChoice);
         }
-
-        // After any move attempt (legal or not), update the entire view to reflect the board's true state.
         updateView();
     }
 
     private void updateView() {
-        // Update the visual board
         view.getChessBoardPanel().updateBoard(board);
-
-        if (board.getTurn() == Colour.WHITE) {
-            whiteClock.start();
-            blackClock.stop();
-        } else {
+        if (!inReplayMode) { // Only run game clocks if not in PGN replay
+            if (board.getTurn() == Colour.WHITE) {
+                whiteClock.start();
+                blackClock.stop();
+            } else {
+                whiteClock.stop();
+                blackClock.start();
+            }
+        } else { // In replay mode, stop both clocks
             whiteClock.stop();
-            blackClock.start();
+            blackClock.stop();
         }
-        // Update the clock labels immediately after a move
+        // Update the clock labels immediately
         view.updateClock(Colour.WHITE, whiteClock.getTime());
         view.updateClock(Colour.BLACK, blackClock.getTime());
 
-
-        // Update the status label (Check, Checkmate, Stalemate, Whose turn)
         Colour currentTurn = board.getTurn();
         String status;
 
@@ -225,19 +193,16 @@ public class GameController {
                 status = "Check! " + currentTurn + "'s turn.";
             } else {
                 status = "Checkmate! " + (currentTurn == Colour.WHITE ? "Black" : "White") + " wins.";
-                swingTimer.stop();
             }
         } else {
             if (board.hasAnyLegalMoves(currentTurn)) {
                 status = currentTurn + "'s turn.";
             } else {
                 status = "Stalemate! It's a draw.";
-                swingTimer.stop();
             }
         }
         view.setStatus(status);
 
-        // Clear any leftover visual artifacts
         view.getChessBoardPanel().clearHighlights();
         view.getChessBoardPanel().clearSelection();
     }
@@ -250,47 +215,32 @@ public class GameController {
     }
 
     private class BoardMouseListener extends MouseAdapter {
-
         @Override
         public void mousePressed(MouseEvent e) {
-            if (inReplayMode) return; // Don't allow interaction during PGN replay
-
-            ChessBoardPanel boardPanel = view.getChessBoardPanel();
-            Square clickedSquare = boardPanel.getSquareFromPoint(e.getPoint());
+            if (inReplayMode) return;
+            Square clickedSquare = view.getChessBoardPanel().getSquareFromPoint(e.getPoint());
             if (clickedSquare == null) return;
 
-            // Check if the player clicked their own piece
             Piece clickedPiece = board.getPiece(clickedSquare);
             if (clickedPiece != null && clickedPiece.getColor() == board.getTurn()) {
                 selectedSquare = clickedSquare;
-
-                // Show visual feedback
-                boardPanel.setDraggedPiece(clickedPiece, e.getPoint());
-                boardPanel.selectSquare(selectedSquare);
+                view.getChessBoardPanel().setDraggedPiece(clickedPiece, e.getPoint());
+                view.getChessBoardPanel().selectSquare(selectedSquare);
                 Set<Square> legalTargets = new HashSet<>(board.getLegalMovesForPiece(selectedSquare));
-                boardPanel.highlightLegalMoves(legalTargets);
+                view.getChessBoardPanel().highlightLegalMoves(legalTargets);
             }
         }
 
         @Override
         public void mouseReleased(MouseEvent e) {
             if (selectedSquare == null) return;
-
-            ChessBoardPanel boardPanel = view.getChessBoardPanel();
-            Square releaseSquare = boardPanel.getSquareFromPoint(e.getPoint());
-
-            // Always clear dragging visuals first
-            boardPanel.clearDraggedPiece();
-
+            view.getChessBoardPanel().clearDraggedPiece();
+            Square releaseSquare = view.getChessBoardPanel().getSquareFromPoint(e.getPoint());
             if (releaseSquare != null && !releaseSquare.equals(selectedSquare)) {
-                // Delegate the actual move logic to the controller
                 attemptUserMove(selectedSquare, releaseSquare);
             } else {
-                // If the move was invalid or canceled, we still need to refresh the view to clear highlights
                 updateView();
             }
-
-            // The move is done or canceled, so clear the selection state
             selectedSquare = null;
         }
 
