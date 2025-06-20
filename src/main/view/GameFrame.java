@@ -1,7 +1,5 @@
 package main.view;
 
-import main.model.pieces.Colour;
-import main.model.pieces.Piece;
 import main.model.pieces.*;
 
 import javax.swing.*;
@@ -21,10 +19,12 @@ public class GameFrame extends JFrame {
     private final JButton quitButton;
     private final JMenuItem newGameMenuItem;
 
+
     // PGN and Replay components
     private final JMenuItem loadPgnMenuItem;
     private final JButton nextMoveButton;
     private final JButton prevMoveButton;
+    private final JButton readyButton;
 
     public GameFrame() {
         super("Chess Game");
@@ -78,6 +78,7 @@ public class GameFrame extends JFrame {
 
         // --- Button Panel (South) ---
         JPanel buttonPanel = new JPanel(new FlowLayout());
+        readyButton = new JButton("Ready");
         nextMoveButton = new JButton("Next >");
         prevMoveButton = new JButton("< Prev");
         quitButton = new JButton("Quit");
@@ -85,6 +86,7 @@ public class GameFrame extends JFrame {
         nextMoveButton.setEnabled(false);
         prevMoveButton.setEnabled(false);
 
+        buttonPanel.add(readyButton);
         buttonPanel.add(prevMoveButton);
         buttonPanel.add(nextMoveButton);
         buttonPanel.add(quitButton);
@@ -94,6 +96,13 @@ public class GameFrame extends JFrame {
         setMinimumSize(getPreferredSize());
         setLocationRelativeTo(null);
         pack();
+    }
+
+    public JButton getReadyButton() {
+        return readyButton;
+    }
+    public void addReadyListener(ActionListener listener) {
+        readyButton.addActionListener(listener);
     }
 
 

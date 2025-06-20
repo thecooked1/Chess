@@ -478,4 +478,60 @@ public class Board {
         }
         return false;
     }
+
+    /**
+    * Updates the board's state from a FEN string.
+    * This is primarily used by the client to synchronize its display board
+    * with the state sent by the server.
+    * @param fen The FEN string for piece placement.
+    */
+    public void updateFromFen(String fen) {
+        // 1. Clear the current grid
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                this.grid[r][c] = null;
+            }
+        }
+
+        // 2. Populate the grid from the FEN string
+        String[] ranks = fen.split(" ")[0].split("/");
+        for (int r = 0; r < ranks.length; r++) {
+            String rankStr = ranks[r];
+            int c = 0;
+            for (char ch : rankStr.toCharArray()) {
+                if (c >= 8) break;
+                if (Character.isDigit(ch)) {
+                    c += Character.getNumericValue(ch);
+                } else {
+                    Colour color = Character.isUpperCase(ch) ? Colour.WHITE : Colour.BLACK;
+                    Piece piece = switch (Character.toLowerCase(ch)) {
+                        case 'r' -> new Rook(color);
+                        case 'n' -> new Knight(color);
+                        case 'b' -> new Bishop(color);
+                        case 'q' -> new Queen(color);
+                        case 'k' -> new King(color);
+                        case 'p' -> new Pawn(color);
+                        default -> null;
+                    };
+                    this.grid[r][c] = piece;
+                    c++;
+                }
+            }
+        }
+
+        String[] parts = fen.split(" ");
+        if (parts.length > 1) {
+            // 'w' for white's turn, 'b' for black's
+            this.turn = parts[1].equals("w") ? Colour.WHITE : Colour.BLACK;
+        }
+
+        // Note: A full implementation would also parse and set the turn, castling rights, etc.
+        // from the FEN string for perfect local validation. For now, this is sufficient for display.
+        
+    }
+
+    public void setTurn(Colour turn) {
+        this.turn = turn;
+    }
+
 }

@@ -38,15 +38,12 @@ public class ChessBoardPanel extends JPanel {
     public void updateBoard(Board board) {
         this.board = board;
         if (board == null) return;
-
-        Square kingInCheck = board.getKingInCheckSquare();
-
+        Square kingInCheck = board.getKingInCheckSquare(); // This can now be re-enabled
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 Square currentSq = new Square(r, c);
                 Piece piece = board.getPiece(currentSq);
                 squarePanels[r][c].setPiece(piece);
-                // Set the special "in check" highlight for the king's square
                 squarePanels[r][c].setInCheck(currentSq.equals(kingInCheck));
             }
         }
