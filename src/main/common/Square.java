@@ -1,6 +1,4 @@
-package main.model;
-
-import java.util.Objects;
+package main.common;
 
 public record Square(int rank, int file) { // rank = y (0-7), file = x (0-7)
 

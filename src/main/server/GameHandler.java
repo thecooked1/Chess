@@ -2,22 +2,26 @@
 
 package main.server;
 
-import main.FenUtility;
-import main.model.Square;
+import main.common.FenUtility;
+import main.common.Square;
 import main.model.Board.Board;
-import main.model.pieces.Colour;
+import main.common.Colour;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import main.PGNGenerator;
+
+/**
+ * Manages the logic for a single chess game between two connected players.
+ */
 public class GameHandler implements Runnable {
 
     private final Socket whitePlayerSocket;
@@ -39,112 +43,120 @@ public class GameHandler implements Runnable {
         this.whitePlayerSocket = whitePlayerSocket;
         this.blackPlayerSocket = blackPlayerSocket;
         this.board = new Board();
-        System.out.println("SERVER: New GameHandler created.");
     }
 
     @Override
     public void run() {
         try {
-            // ... (setup is the same)
-            whiteOut = new PrintWriter(whitePlayerSocket.getOutputStream(), true);
-            whiteIn = new BufferedReader(new InputStreamReader(whitePlayerSocket.getInputStream()));
-            blackOut = new PrintWriter(blackPlayerSocket.getOutputStream(), true);
-            blackIn = new BufferedReader(new InputStreamReader(blackPlayerSocket.getInputStream()));
-
-            Thread whiteLobbyThread = new Thread(() -> handleLobbyPhase(whiteIn, true));
-            Thread blackLobbyThread = new Thread(() -> handleLobbyPhase(blackIn, false));
-            whiteLobbyThread.start();
-            blackLobbyThread.start();
-
-            whiteLobbyThread.join();
-            blackLobbyThread.join();
-
-            whiteOut.println("ASSIGN_COLOR WHITE");
-            blackOut.println("ASSIGN_COLOR BLACK");
-            whiteOut.println("OPPONENT_NAME " + blackPlayerName);
-            blackOut.println("OPPONENT_NAME " + whitePlayerName);
-
-            int gameTimeSeconds = (whiteTimePreference + blackTimePreference) / 2;
-            broadcastMessage("GAME_START " + gameTimeSeconds + " " + gameTimeSeconds);
-            System.out.println("SERVER: Game started between " + whitePlayerName + " and " + blackPlayerName);
-
-
-            while (true) {
-                broadcastState();
-
-                if (!board.hasAnyLegalMoves(board.getTurn())) {
-                    // ... (game over logic is the same)
-                    String result;
-                    String message;
-                    if (board.isInCheck(board.getTurn())) {
-                        message = "Checkmate! " + (board.getTurn() == Colour.WHITE ? "Black" : "White") + " wins.";
-                        result = (board.getTurn() == Colour.WHITE) ? "0-1" : "1-0";
-                    } else {
-                        message = "Stalemate! The game is a draw.";
-                        result = "1/2-1/2";
-                    }
-                    broadcastMessage("GAME_OVER " + message);
-                    System.out.println("SERVER: Game over. Result: " + result);
-                    sendPgnToClients(result);
-                    break;
-                }
-
-                if (board.getTurn() == Colour.WHITE) {
-                    System.out.println("SERVER: --- It is WHITE's turn ---");
-                    handlePlayerTurn(whiteOut, whiteIn, blackOut);
-                } else {
-                    System.out.println("SERVER: --- It is BLACK's turn ---");
-                    handlePlayerTurn(blackOut, blackIn, whiteOut);
-                }
-            }
-
+            setupLobby();
+            startGameSequence();
+            mainGameLoop();
         } catch (IOException | InterruptedException e) {
             System.out.println("Game handler error: " + e.getMessage());
-            sendPgnToClients("*");
+            sendPgnToClients("*"); // Game terminated unexpectedly
         } finally {
             closeConnections();
         }
     }
 
+    /**
+     * Sets up IO streams and handles the pre-game lobby phase for both players.
+     */
+    private void setupLobby() throws IOException, InterruptedException {
+        whiteOut = new PrintWriter(whitePlayerSocket.getOutputStream(), true);
+        whiteIn = new BufferedReader(new InputStreamReader(whitePlayerSocket.getInputStream()));
+        blackOut = new PrintWriter(blackPlayerSocket.getOutputStream(), true);
+        blackIn = new BufferedReader(new InputStreamReader(blackPlayerSocket.getInputStream()));
+
+        Thread whiteLobbyThread = new Thread(() -> handleLobbyPhase(whiteIn, true));
+        Thread blackLobbyThread = new Thread(() -> handleLobbyPhase(blackIn, false));
+        whiteLobbyThread.start();
+        blackLobbyThread.start();
+
+        whiteLobbyThread.join();
+        blackLobbyThread.join();
+    }
+
+    /**
+     * Sends the initial game start information to both clients.
+     */
+    private void startGameSequence() {
+        whiteOut.println("ASSIGN_COLOR WHITE");
+        blackOut.println("ASSIGN_COLOR BLACK");
+        whiteOut.println("OPPONENT_NAME " + blackPlayerName);
+        blackOut.println("OPPONENT_NAME " + whitePlayerName);
+
+        int gameTimeSeconds = (whiteTimePreference + blackTimePreference) / 2;
+        broadcastMessage("GAME_START " + gameTimeSeconds + " " + gameTimeSeconds);
+    }
+
+    /**
+     * Contains the main loop that alternates turns until the game is over.
+     */
+    private void mainGameLoop() throws IOException {
+        while (true) {
+            broadcastState();
+
+            if (isGameOver()) {
+                break;
+            }
+
+            if (board.getTurn() == Colour.WHITE) {
+                handlePlayerTurn(whiteOut, whiteIn, blackOut);
+            } else {
+                handlePlayerTurn(blackOut, blackIn, whiteOut);
+            }
+        }
+    }
+
+    /**
+     * Checks for game-ending conditions like checkmate or stalemate and handles them.
+     *
+     * @return true if the game is over, false otherwise.
+     */
+    private boolean isGameOver() {
+        if (board.hasAnyLegalMoves(board.getTurn())) {
+            return false;
+        }
+
+        String result;
+        String message;
+        if (board.isInCheck(board.getTurn())) {
+            message = "Checkmate! " + (board.getTurn() == Colour.WHITE ? "Black" : "White") + " wins.";
+            result = (board.getTurn() == Colour.WHITE) ? "0-1" : "1-0";
+        } else {
+            message = "Stalemate! The game is a draw.";
+            result = "1/2-1/2";
+        }
+        broadcastMessage("GAME_OVER " + message);
+        sendPgnToClients(result);
+        return true;
+    }
 
     private void handlePlayerTurn(PrintWriter activePlayerOut, BufferedReader activePlayerIn, PrintWriter opponentOut) throws IOException {
+        // ... This method is already clean and focused, no changes needed ...
         activePlayerOut.println("YOUR_TURN");
         opponentOut.println("OPPONENT_TURN");
-
         while (true) {
             String clientMessage = activePlayerIn.readLine();
             if (clientMessage == null) {
                 throw new IOException("Player disconnected.");
             }
-            System.out.println("SERVER: Received message: " + clientMessage);
-
             String[] parts = clientMessage.split(" ");
             String command = parts[0];
-
             if ("MOVE".equals(command)) {
                 Square start = Square.fromAlgebraic(parts[1]);
                 Square end = Square.fromAlgebraic(parts[2]);
                 Optional<String> promo = parts.length > 3 ? Optional.of(parts[3]) : Optional.empty();
-
-                System.out.println("SERVER: Checking legality of move " + start.toAlgebraic() + " to " + end.toAlgebraic());
                 if (board.isLegalMove(start, end)) {
-                    System.out.println("SERVER: Move is legal. Applying to board.");
-
-                    // We will use the simplified "debugging" version of applyMove from the last attempt.
                     String san = board.applyMove(start, end, promo);
-                    System.out.println("SERVER: Board.applyMove returned: \"" + san + "\"");
-
                     moveHistory.add(san);
-                    System.out.println("SERVER: Move added to history. History size is now: " + moveHistory.size());
-
                     activePlayerOut.println("VALID_MOVE");
                     break;
                 } else {
-                    System.out.println("SERVER: Move is ILLEGAL.");
                     activePlayerOut.println("INVALID_MOVE Move is not legal.");
                 }
             } else if ("GET_LEGAL_MOVES".equals(command)) {
-                // ... (this part is fine)
                 Square start = Square.fromAlgebraic(parts[1]);
                 List<Square> legalMoves = board.getLegalMovesForPiece(start);
                 String movesString = legalMoves.stream().map(Square::toString).collect(Collectors.joining(" "));
@@ -153,17 +165,26 @@ public class GameHandler implements Runnable {
         }
     }
 
+    /**
+     * Generates the PGN string using the PgnGenerator and sends it to the clients.
+     */
+    private void sendPgnToClients(String result) {
+        String pgn = PGNGenerator.generate(whitePlayerName, blackPlayerName, result, moveHistory);
+        // Replace newlines with a special character for transport over a single line.
+        String pgnForTransport = pgn.replace("\n", "|");
+        broadcastMessage("GAME_PGN:::" + pgnForTransport);
+    }
+
+    // ... other helper methods (handleLobbyPhase, broadcastState, etc.) are unchanged ...
     private void handleLobbyPhase(BufferedReader in, boolean isWhite) {
-        // ... (this part is fine)
         try {
             boolean readySet = false;
             String line;
-            while(!readySet && (line = in.readLine()) != null) {
+            while (!readySet && (line = in.readLine()) != null) {
                 String[] parts = line.split(" ", 2);
                 String command = parts[0];
                 String payload = parts.length > 1 ? parts[1] : "";
-
-                switch(command) {
+                switch (command) {
                     case "SET_NAME":
                         if (isWhite) whitePlayerName = payload;
                         else blackPlayerName = payload;
@@ -186,38 +207,6 @@ public class GameHandler implements Runnable {
             System.out.println("Lobby error for one player: " + e.getMessage());
         }
     }
-
-    private void sendPgnToClients(String result) {
-        System.out.println("SERVER: Generating PGN. Final history size: " + moveHistory.size());
-        System.out.println("SERVER: Moves in history: " + moveHistory);
-
-        StringBuilder pgn = new StringBuilder();
-        LocalDate today = LocalDate.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy.MM.dd");
-
-        pgn.append(String.format("[Event \"Online Chess Match\"]%n"));
-        pgn.append(String.format("[Site \"Java Chess Server\"]%n"));
-        pgn.append(String.format("[Date \"%s\"]%n", today.format(formatter)));
-        pgn.append(String.format("[Round \"1\"]%n"));
-        pgn.append(String.format("[White \"%s\"]%n", whitePlayerName));
-        pgn.append(String.format("[Black \"%s\"]%n", blackPlayerName));
-        pgn.append(String.format("[Result \"%s\"]%n%n", result));
-
-        int moveNumber = 1;
-        for (int i = 0; i < moveHistory.size(); i++) {
-            if (i % 2 == 0) {
-                pgn.append(moveNumber).append(". ");
-                moveNumber++;
-            }
-            pgn.append(moveHistory.get(i)).append(" ");
-        }
-        pgn.append(result);
-
-        String pgnForTransport = pgn.toString().replace("\n", "|");
-        System.out.println("SERVER: Sending PGN data to clients.");
-        broadcastMessage("GAME_PGN:::" + pgnForTransport);
-    }
-
 
     private void broadcastState() {
         String fen = FenUtility.toFen(board);

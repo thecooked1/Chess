@@ -1,5 +1,5 @@
 package main.view;
-import main.model.pieces.Colour;
+import main.common.Colour;
 import main.model.pieces.Piece;
 import main.model.pieces.Pawn;
 import javax.imageio.ImageIO;

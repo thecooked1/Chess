@@ -1,5 +1,6 @@
 package main.model.Game;
 
+import main.common.Colour;
 import main.model.Board.Board;
 import main.model.PGNParser.Interpreter;
 import main.model.PGNParser.Move;
@@ -27,7 +28,7 @@ public class Game {
             for (String token : moveTokens) {
                 // Determine whose turn it is BEFORE the move
                 String player = board.getTurn().toString();
-                String moveNumStr = (board.getTurn() == main.model.pieces.Colour.WHITE) ? moveNumber + "." : moveNumber + "...";
+                String moveNumStr = (board.getTurn() == Colour.WHITE) ? moveNumber + "." : moveNumber + "...";
                 System.out.println(moveNumStr + " " + player + " plays " + token);
 
                 Move move;
@@ -48,7 +49,7 @@ public class Game {
                 }
 
                 // Increment move number after Black has moved.
-                if (board.getTurn() == main.model.pieces.Colour.WHITE) {
+                if (board.getTurn() == Colour.WHITE) {
                     moveNumber++;
                 }
             }

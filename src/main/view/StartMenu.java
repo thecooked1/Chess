@@ -1,7 +1,5 @@
 package main.view;
 
-import main.model.pieces.Colour;
-import main.model.pieces.Pawn;
 import javax.swing.*;
 import java.awt.*;
 import java.util.Objects;

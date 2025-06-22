@@ -3,7 +3,7 @@
 package main.view;
 
 import main.model.pieces.*;
-import main.model.pieces.Colour;
+import main.common.Colour;
 
 import javax.swing.*;
 import java.awt.*;

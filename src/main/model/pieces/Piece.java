@@ -1,6 +1,7 @@
 package main.model.pieces;
+import main.common.Colour;
 import main.model.Board.Board;
-import main.model.Square;
+import main.common.Square;
 
 
 public abstract class Piece {

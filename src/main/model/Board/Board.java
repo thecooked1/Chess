@@ -1,7 +1,8 @@
 // main/model/Board/Board.java
 package main.model.Board;
 
-import main.model.Square;
+import main.common.Colour;
+import main.common.Square;
 import main.model.pieces.*;
 import main.model.PGNParser.Move;
 
@@ -10,11 +11,11 @@ import java.util.List;
 import java.util.Optional;
 
 public class Board {
+    // ... fields are unchanged ...
     private final Piece[][] grid;
     private Colour turn;
     private Square enPassantTargetSquare;
     private Square kingInCheckSquare;
-
     private boolean whiteKingsideCastleRight = true;
     private boolean whiteQueensideCastleRight = true;
     private boolean blackKingsideCastleRight = true;
@@ -25,12 +26,15 @@ public class Board {
         setupInitialPosition();
     }
 
+    /**
+     * Applies a move to the board and returns its Standard Algebraic Notation (SAN).
+     * This method orchestrates the SAN generation and then applies the move.
+     *
+     * @return The SAN string for the move (e.g., "Nf3", "e4", "O-O", "Qxh7#").
+     */
     public String applyMove(Square start, Square end, Optional<String> promotionPiece) {
         Piece movingPiece = getPiece(start);
-        if (movingPiece == null) {
-            throw new IllegalArgumentException("No piece at start square " + start);
-        }
-
+        if (movingPiece == null) { throw new IllegalArgumentException("No piece at start square " + start); }
         StringBuilder sanBuilder = new StringBuilder();
 
         if (movingPiece instanceof King && Math.abs(start.file() - end.file()) == 2) {
@@ -41,8 +45,10 @@ public class Board {
             }
             sanBuilder.append(getDisambiguation(movingPiece, start, end));
 
+            // The check for en passant capture must happen here for correct SAN generation.
+            boolean isEnPassant = movingPiece instanceof Pawn && end.equals(getEnPassantTargetSquare());
             Piece capturedPiece = getPiece(end);
-            boolean isEnPassant = movingPiece instanceof Pawn && end.equals(enPassantTargetSquare);
+
             if (capturedPiece != null || isEnPassant) {
                 if (movingPiece instanceof Pawn) {
                     sanBuilder.append(start.fileAsChar());
@@ -51,7 +57,6 @@ public class Board {
             }
 
             sanBuilder.append(end.toAlgebraic());
-
             if (movingPiece instanceof Pawn && (end.rank() == 0 || end.rank() == 7)) {
                 String promo = promotionPiece.orElse("Q").toUpperCase();
                 sanBuilder.append("=").append(promo);
@@ -67,19 +72,89 @@ public class Board {
                 sanBuilder.append('#');
             }
         }
-
         return sanBuilder.toString();
     }
+
+
+    /**
+     * Determines if a move requires disambiguation (e.g., Nbd2, R1a2) and returns
+     * the necessary notation. This is one of the most complex parts of SAN generation.
+     *
+     * @return The disambiguation string (e.g., "b", "1", "a1") or an empty string if not needed.
+     */
+    private String getDisambiguation(Piece movingPiece, Square start, Square end) {
+        if (movingPiece instanceof Pawn || movingPiece instanceof King) {
+            return "";
+        }
+        List<Square> ambiguousSquares = new ArrayList<>();
+        Colour originalTurn = this.turn;
+
+        // Find all other pieces of the same type that could also legally move to the target square.
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                Square otherSquare = new Square(r, c);
+                Piece otherPiece = getPiece(otherSquare);
+                if (!otherSquare.equals(start) && otherPiece != null && otherPiece.getClass().equals(movingPiece.getClass()) && otherPiece.getColor() == movingPiece.getColor()) {
+                    // Temporarily set the turn to check the move's legality, then restore it.
+                    // This is critical to avoid corrupting the board's state.
+                    this.turn = movingPiece.getColor();
+                    boolean isLegal = isLegalMove(otherSquare, end);
+                    this.turn = originalTurn;
+                    if (isLegal) {
+                        ambiguousSquares.add(otherSquare);
+                    }
+                }
+            }
+        }
+        if (ambiguousSquares.isEmpty()) {
+            return "";
+        }
+
+        // Disambiguation Rule 1: If the files are different, use the file letter. (e.g., Nbd2 vs Nfd2)
+        boolean fileIsUnique = true;
+        for (Square sq : ambiguousSquares) {
+            if (sq.file() == start.file()) {
+                fileIsUnique = false;
+                break;
+            }
+        }
+        if (fileIsUnique) {
+            return String.valueOf(start.fileAsChar());
+        }
+
+        // Disambiguation Rule 2: If files are the same, but ranks are different, use the rank. (e.g., R1a2 vs R8a2)
+        boolean rankIsUnique = true;
+        for (Square sq : ambiguousSquares) {
+            if (sq.file() == start.file()) {
+                if (sq.rank() == start.rank()) {
+                    rankIsUnique = false;
+                    break;
+                }
+            }
+        }
+        if (rankIsUnique) {
+            return String.valueOf(start.rankAsChar());
+        }
+
+        // Disambiguation Rule 3: If both rank and file are the same (e.g., from promotions), use the full coordinate.
+        return start.toAlgebraic();
+    }
+
+    // ... all other methods are unchanged and correct, so I am omitting them for brevity ...
+    // In main/model/Board/Board.java
 
     private Piece internalApplyMove(Square start, Square end, Optional<String> promotionPiece) {
         Piece movingPiece = getPiece(start);
         Piece capturedPiece = getPiece(end);
-        if (movingPiece instanceof Pawn && end.equals(enPassantTargetSquare)) {
+
+        // Handle en passant capture, where the captured piece is not on the 'end' square.
+        if (movingPiece instanceof Pawn && end.equals(getEnPassantTargetSquare())) {
             int capturedPawnRank = turn == Colour.WHITE ? end.rank() + 1 : end.rank() - 1;
             Square capturedPawnSquare = new Square(capturedPawnRank, end.file());
             capturedPiece = getPiece(capturedPawnSquare);
             setPiece(capturedPawnSquare, null);
         }
+
         if (movingPiece instanceof King && Math.abs(start.file() - end.file()) == 2) {
             handleRookCastleMove(start, end);
         }
@@ -102,55 +177,6 @@ public class Board {
         return capturedPiece;
     }
 
-    private String getDisambiguation(Piece movingPiece, Square start, Square end) {
-        if (movingPiece instanceof Pawn || movingPiece instanceof King) {
-            return "";
-        }
-        List<Square> ambiguousSquares = new ArrayList<>();
-        Colour originalTurn = this.turn;
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                Square otherSquare = new Square(r, c);
-                Piece otherPiece = getPiece(otherSquare);
-                if (!otherSquare.equals(start) && otherPiece != null && otherPiece.getClass().equals(movingPiece.getClass()) && otherPiece.getColor() == movingPiece.getColor()) {
-                    this.turn = movingPiece.getColor();
-                    boolean isLegal = isLegalMove(otherSquare, end);
-                    this.turn = originalTurn;
-                    if (isLegal) {
-                        ambiguousSquares.add(otherSquare);
-                    }
-                }
-            }
-        }
-        if (ambiguousSquares.isEmpty()) {
-            return "";
-        }
-        boolean fileIsUnique = true;
-        for (Square sq : ambiguousSquares) {
-            if (sq.file() == start.file()) {
-                fileIsUnique = false;
-                break;
-            }
-        }
-        if (fileIsUnique) {
-            return String.valueOf(start.fileAsChar());
-        }
-        boolean rankIsUnique = true;
-        for (Square sq : ambiguousSquares) {
-            if (sq.file() == start.file()) { // Check only among pieces on the same file
-                if (sq.rank() == start.rank()) {
-                    rankIsUnique = false;
-                    break;
-                }
-            }
-        }
-        if (rankIsUnique) {
-            return String.valueOf(start.rankAsChar());
-        }
-        return start.toAlgebraic();
-    }
-
-    // ... all other methods are unchanged and correct, so I am omitting them for brevity ...
     public boolean applyMove(Move move) {
         if (move.isKingsideCastle() || move.isQueensideCastle()) {
             return applyCastlingFromPGN(move);
@@ -217,33 +243,51 @@ public class Board {
         return legalMoves;
     }
 
+    // In main/model/Board/Board.java
+
     public boolean isLegalMove(Square start, Square end) {
         Piece piece = getPiece(start);
         if (piece == null || piece.getColor() != turn) return false;
         if (start.equals(end)) return false;
-        if (piece instanceof King && Math.abs(start.file() - end.file()) == 2) {
-            return isCastleLegal(start, end);
+
+        // Check 1: Is the move pattern valid for the piece?
+        if (!piece.isValidMove(start, end, this)) {
+            // Allow for castling, which isn't a standard piece move
+            if (!(piece instanceof King && Math.abs(start.file() - end.file()) == 2 && isCastleLegal(start, end))) {
+                return false;
+            }
         }
-        if (!piece.isValidMove(start, end, this)) return false;
+
+        // Check 2: Are we capturing our own piece?
         Piece targetPiece = getPiece(end);
         if (targetPiece != null && targetPiece.getColor() == turn) return false;
-        boolean leavesKingInCheck;
+
+        // Check 3: Does this move leave our king in check?
+        boolean isEnPassantMove = piece instanceof Pawn && end.equals(getEnPassantTargetSquare());
+        Square capturedPawnSquare = null;
+        Piece capturedPawn = null;
+
+        // --- Simulate the move ---
         setPiece(end, piece);
         setPiece(start, null);
-        Square enPassantCaptureSquare = null;
-        Piece enPassantPawn = null;
-        if (piece instanceof Pawn && end.equals(enPassantTargetSquare)) {
-            int capturedPawnRank = turn == Colour.WHITE ? end.rank() + 1 : end.rank() - 1;
-            enPassantCaptureSquare = new Square(capturedPawnRank, end.file());
-            enPassantPawn = getPiece(enPassantCaptureSquare);
-            setPiece(enPassantCaptureSquare, null);
+
+        if (isEnPassantMove) {
+            int capturedRank = piece.getColor() == Colour.WHITE ? end.rank() + 1 : end.rank() - 1;
+            capturedPawnSquare = new Square(capturedRank, end.file());
+            capturedPawn = getPiece(capturedPawnSquare);
+            setPiece(capturedPawnSquare, null);
         }
-        leavesKingInCheck = isInCheck(turn);
+
+        boolean leavesKingInCheck = isInCheck(turn);
+
+        // --- Undo the simulation ---
         setPiece(start, piece);
         setPiece(end, targetPiece);
-        if (enPassantPawn != null) {
-            setPiece(enPassantCaptureSquare, enPassantPawn);
+
+        if (isEnPassantMove) {
+            setPiece(capturedPawnSquare, capturedPawn);
         }
+
         return !leavesKingInCheck;
     }
 
@@ -379,10 +423,14 @@ public class Board {
     }
 
     private void updateEnPassantTarget(Piece movingPiece, Square start, Square end) {
+        // If a pawn just made a two-square jump...
         if (movingPiece instanceof Pawn && Math.abs(start.rank() - end.rank()) == 2) {
-            enPassantTargetSquare = new Square((start.rank() + end.rank()) / 2, start.file());
+            // ...the en passant target is the square it "jumped" over.
+            int targetRank = (start.rank() + end.rank()) / 2;
+            this.enPassantTargetSquare = new Square(targetRank, start.file());
         } else {
-            enPassantTargetSquare = null;
+            // For any other move, the en passant opportunity is lost.
+            this.enPassantTargetSquare = null;
         }
     }
 
@@ -402,7 +450,7 @@ public class Board {
         if (start.equals(Square.fromAlgebraic("a8"))) blackQueensideCastleRight = false;
         if (end.equals(Square.fromAlgebraic("h1"))) whiteKingsideCastleRight = false;
         if (end.equals(Square.fromAlgebraic("a1"))) whiteQueensideCastleRight = false;
-        if (end.equals(Square.fromAlgebraic("h8"))) blackQueensideCastleRight = false;
+        if (end.equals(Square.fromAlgebraic("h8"))) blackKingsideCastleRight = false;
         if (end.equals(Square.fromAlgebraic("a8"))) blackQueensideCastleRight = false;
     }
 
@@ -490,12 +538,22 @@ public class Board {
     }
 
     public void updateFromFen(String fen) {
+        // Clear the current grid
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 this.grid[r][c] = null;
             }
         }
-        String[] ranks = fen.split(" ")[0].split("/");
+
+        // Reset state
+        this.enPassantTargetSquare = null;
+        // A full implementation would reset castling rights here too
+
+        String[] parts = fen.split(" ");
+        String piecePlacement = parts[0];
+        String[] ranks = piecePlacement.split("/");
+
+        // Part 1: Piece Placement
         for (int r = 0; r < ranks.length; r++) {
             String rankStr = ranks[r];
             int c = 0;
@@ -519,9 +577,18 @@ public class Board {
                 }
             }
         }
-        String[] parts = fen.split(" ");
+
+        // Part 2: Active Color
         if (parts.length > 1) {
-            this.turn = parts[1].equals("w") ? Colour.WHITE : Colour.BLACK;
+            this.turn = parts[1].equals("w") ? Colour.WHITE : Colour.WHITE;
+        }
+
+        // Part 3: Castling Rights (ignored for now)
+
+        // Part 4: En Passant Target Square
+        // --- THIS IS THE CRITICAL FIX ---
+        if (parts.length > 3 && !parts[3].equals("-")) {
+            this.enPassantTargetSquare = Square.fromAlgebraic(parts[3]);
         }
     }
 

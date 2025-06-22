@@ -1,8 +1,10 @@
+
 package main.client;
 
+import main.common.Colour;
 import main.model.pieces.*;
-import main.FenUtility;
-import main.model.Square;
+import main.common.FenUtility;
+import main.common.Square;
 import main.view.GameFrame;
 import main.model.Board.*;
 import main.model.Clock;
@@ -37,11 +39,8 @@ public class GameController {
     private Timer swingTimer;
     private Clock myClock;
     private Clock opponentClock;
-
-
     private StringBuilder pgnBuilder = null;
     private String finalPgn = null;
-
 
     public GameController() {
         this.view = new GameFrame();
@@ -51,134 +50,6 @@ public class GameController {
         this.view.setVisible(true);
         view.setStatus("Connecting to server...");
         new Thread(networkHandler).start();
-    }
-
-    private void handleServerMessage(String message) {
-        SwingUtilities.invokeLater(() -> {
-
-            // STATE 1: We are currently assembling a PGN string.
-            if (pgnBuilder != null) {
-                pgnBuilder.append(message);
-
-                // Check if this is the final piece of the PGN.
-                String currentPgn = pgnBuilder.toString();
-                if (currentPgn.endsWith("1-0") || currentPgn.endsWith("0-1") || currentPgn.endsWith("1/2-1/2") || currentPgn.endsWith("*")) {
-                    this.finalPgn = currentPgn.replace("|", "\n");
-                    view.getSavePgnMenuItem().setEnabled(true);
-                    view.setStatus("Game finished. PGN ready to save from File menu.");
-                    pgnBuilder = null; // Exit PGN-reading mode.
-                }
-                return; // Do not process this message any further.
-            }
-
-            // STATE 2: We are not currently reading a PGN. Check if a new PGN is starting.
-            if (message.startsWith("GAME_PGN:::")) {
-                pgnBuilder = new StringBuilder(); // Enter PGN-reading mode.
-                String firstPart = message.substring("GAME_PGN:::".length());
-                pgnBuilder.append(firstPart);
-                return; // Do not process this message any further.
-            }
-
-            // STATE 3: This is a normal, single-line command.
-            String[] parts = message.split(" ", 2);
-            String command = parts[0];
-
-            switch (command) {
-                case "CONNECTED":
-                    JTextField nameField = new JTextField("Player");
-                    JTextField timeField = new JTextField("10");
-                    JPanel panel = new JPanel(new GridLayout(0, 2, 5, 5));
-                    panel.add(new JLabel("Your Name:"));
-                    panel.add(nameField);
-                    panel.add(new JLabel("Time per side (minutes):"));
-                    panel.add(timeField);
-                    int result = JOptionPane.showConfirmDialog(view, panel, "Game Setup", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-                    if (result == JOptionPane.OK_OPTION) {
-                        this.myName = nameField.getText().trim().isEmpty() ? "Guest" : nameField.getText().trim();
-                        int timeMinutes = 10;
-                        try {
-                            timeMinutes = Integer.parseInt(timeField.getText().trim());
-                            if (timeMinutes < 1) timeMinutes = 1;
-                        } catch (NumberFormatException e) {
-                        }
-                        networkHandler.sendMessage("SET_NAME " + this.myName);
-                        networkHandler.sendMessage("SET_TIME " + (timeMinutes * 60));
-                        view.setStatus("Settings sent. Click 'Ready' to start.");
-                    } else {
-                        System.exit(0);
-                    }
-                    break;
-                case "ASSIGN_COLOR":
-                    this.myColor = Colour.valueOf(parts[1]);
-                    view.setTitle("Chess Client - Playing as " + parts[1]);
-                    break;
-                case "OPPONENT_NAME":
-                    this.opponentName = parts.length > 1 ? parts[1] : "Opponent";
-                    Map<String, String> names = new HashMap<>();
-                    if (myColor == Colour.WHITE) {
-                        names.put("White", myName + " (You)");
-                        names.put("Black", opponentName);
-                    } else {
-                        names.put("White", opponentName);
-                        names.put("Black", myName + " (You)");
-                    }
-                    view.updatePlayerInfo(names);
-                    break;
-                case "GAME_START":
-                    view.getReadyButton().setVisible(false);
-                    view.setStatus("Game started!");
-                    String[] timeParts = message.split(" ");
-                    int gameTimeSeconds = Integer.parseInt(timeParts[1]);
-                    this.myClock = new Clock(0, 0, gameTimeSeconds);
-                    this.opponentClock = new Clock(0, 0, gameTimeSeconds);
-                    this.swingTimer = new Timer(1000, e -> updateClocks());
-                    this.swingTimer.start();
-                    break;
-                case "UPDATE_STATE":
-                    this.displayBoard.updateFromFen(parts[1]);
-                    view.getChessBoardPanel().updateBoard(this.displayBoard);
-                    break;
-                case "WAITING_FOR_OPPONENT":
-                    view.setStatus("Waiting for opponent to be ready...");
-                    break;
-                case "YOUR_TURN":
-                    this.isMyTurn = true;
-                    displayBoard.setTurn(myColor);
-                    view.setStatus("Your turn.");
-                    if (myClock != null) myClock.start();
-                    if (opponentClock != null) opponentClock.stop();
-                    break;
-                case "OPPONENT_TURN":
-                    this.isMyTurn = false;
-                    displayBoard.setTurn(myColor == Colour.WHITE ? Colour.BLACK : Colour.WHITE);
-                    view.setStatus("Opponent's turn.");
-                    if (myClock != null) myClock.stop();
-                    if (opponentClock != null) opponentClock.start();
-                    break;
-                case "VALID_MOVE":
-                    break;
-                case "INVALID_MOVE":
-                    view.setStatus("Invalid move: " + (parts.length > 1 ? parts[1] : ""));
-                    isMyTurn = true;
-                    break;
-                case "GAME_OVER":
-                    if (swingTimer != null) swingTimer.stop();
-                    isMyTurn = false;
-                    view.setStatus("Game Over. PGN data is being sent.");
-                    view.showGameOverDialog(parts.length > 1 ? parts[1] : "Game is over!", "Game Over");
-                    break;
-                case "ERROR":
-                    view.setStatus("Error: " + (parts.length > 1 ? parts[1] : ""));
-                    break;
-                case "LEGAL_MOVES":
-                    view.getChessBoardPanel().clearHighlights();
-                    if (parts.length > 1 && !parts[1].isEmpty()) {
-                        Set<Square> legalSquares = Arrays.stream(parts[1].split(" ")).map(Square::fromAlgebraic).collect(Collectors.toSet());
-                        view.getChessBoardPanel().highlightLegalMoves(legalSquares);
-                    }
-                    break;
-            }
-        });
     }
 
     private void initListeners() {
@@ -192,9 +63,161 @@ public class GameController {
         this.view.getChessBoardPanel().addMouseMotionListener(mouseListener);
     }
 
+    /**
+     * This is the master method that processes all incoming messages from the server.
+     * It acts as a dispatcher, calling specific handler methods based on the command.
+     */
+    private void handleServerMessage(String message) {
+        SwingUtilities.invokeLater(() -> {
+            if (handlePgnStream(message)) {
+                return; // If it was part of a PGN message, stop processing.
+            }
+
+            String[] parts = message.split(" ", 2);
+            String command = parts[0];
+            String payload = parts.length > 1 ? parts[1] : "";
+
+            switch (command) {
+                case "CONNECTED" -> handleConnected();
+                case "ASSIGN_COLOR" -> handleAssignColor(payload);
+                case "OPPONENT_NAME" -> handleOpponentName(payload);
+                case "GAME_START" -> handleGameStart(payload);
+                case "UPDATE_STATE" -> handleUpdateState(payload);
+                case "YOUR_TURN" -> handleYourTurn();
+                case "OPPONENT_TURN" -> handleOpponentTurn();
+                case "GAME_OVER" -> handleGameOver(payload);
+                case "LEGAL_MOVES" -> handleLegalMoves(payload);
+                case "WAITING_FOR_OPPONENT" -> view.setStatus("Waiting for opponent to be ready...");
+                case "VALID_MOVE" -> { /* No action needed, wait for state update */ }
+                case "INVALID_MOVE" -> {
+                    view.setStatus("Invalid move: " + payload);
+                    isMyTurn = true;
+                }
+                case "ERROR" -> view.setStatus("Error: " + payload);
+            }
+        });
+    }
+
+    /**
+     * Handles the stream of PGN data, which may arrive in multiple packets.
+     *
+     * @return true if the message was part of a PGN stream, false otherwise.
+     */
+    private boolean handlePgnStream(String message) {
+        if (pgnBuilder != null) {
+            pgnBuilder.append(message);
+            String currentPgn = pgnBuilder.toString();
+            if (currentPgn.endsWith("1-0") || currentPgn.endsWith("0-1") || currentPgn.endsWith("1/2-1/2") || currentPgn.endsWith("*")) {
+                this.finalPgn = currentPgn.replace("|", "\n");
+                view.getSavePgnMenuItem().setEnabled(true);
+                view.setStatus("Game finished. PGN ready to save from File menu.");
+                pgnBuilder = null;
+            }
+            return true;
+        }
+        if (message.startsWith("GAME_PGN:::")) {
+            pgnBuilder = new StringBuilder();
+            pgnBuilder.append(message.substring("GAME_PGN:::".length()));
+            return true;
+        }
+        return false;
+    }
+
+    // --- Specific Handler Methods for each Server Command ---
+
+    private void handleConnected() {
+        JTextField nameField = new JTextField("Player");
+        JTextField timeField = new JTextField("10");
+        JPanel panel = new JPanel(new GridLayout(0, 2, 5, 5));
+        panel.add(new JLabel("Your Name:"));
+        panel.add(nameField);
+        panel.add(new JLabel("Time per side (minutes):"));
+        panel.add(timeField);
+        int result = JOptionPane.showConfirmDialog(view, panel, "Game Setup", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result == JOptionPane.OK_OPTION) {
+            this.myName = nameField.getText().trim().isEmpty() ? "Guest" : nameField.getText().trim();
+            int timeMinutes = 10;
+            try {
+                timeMinutes = Integer.parseInt(timeField.getText().trim());
+                if (timeMinutes < 1) timeMinutes = 1;
+            } catch (NumberFormatException e) {
+            }
+            networkHandler.sendMessage("SET_NAME " + this.myName);
+            networkHandler.sendMessage("SET_TIME " + (timeMinutes * 60));
+            view.setStatus("Settings sent. Click 'Ready' to start.");
+        } else {
+            System.exit(0);
+        }
+    }
+
+    private void handleAssignColor(String payload) {
+        this.myColor = Colour.valueOf(payload);
+        view.setTitle("Chess Client - Playing as " + payload);
+    }
+
+    private void handleOpponentName(String payload) {
+        this.opponentName = payload;
+        Map<String, String> names = new HashMap<>();
+        if (myColor == Colour.WHITE) {
+            names.put("White", myName + " (You)");
+            names.put("Black", opponentName);
+        } else {
+            names.put("White", opponentName);
+            names.put("Black", myName + " (You)");
+        }
+        view.updatePlayerInfo(names);
+    }
+
+    private void handleGameStart(String payload) {
+        view.getReadyButton().setVisible(false);
+        view.setStatus("Game started!");
+        int gameTimeSeconds = Integer.parseInt(payload.split(" ")[0]);
+        this.myClock = new Clock(0, 0, gameTimeSeconds);
+        this.opponentClock = new Clock(0, 0, gameTimeSeconds);
+        this.swingTimer = new Timer(1000, e -> updateClocks());
+        this.swingTimer.start();
+    }
+
+    private void handleUpdateState(String payload) {
+        this.displayBoard.updateFromFen(payload);
+        view.getChessBoardPanel().updateBoard(this.displayBoard);
+    }
+
+    private void handleYourTurn() {
+        this.isMyTurn = true;
+        displayBoard.setTurn(myColor);
+        view.setStatus("Your turn.");
+        if (myClock != null) myClock.start();
+        if (opponentClock != null) opponentClock.stop();
+    }
+
+    private void handleOpponentTurn() {
+        this.isMyTurn = false;
+        displayBoard.setTurn(myColor == Colour.WHITE ? Colour.BLACK : Colour.WHITE);
+        view.setStatus("Opponent's turn.");
+        if (myClock != null) myClock.stop();
+        if (opponentClock != null) opponentClock.start();
+    }
+
+    private void handleGameOver(String payload) {
+        if (swingTimer != null) swingTimer.stop();
+        isMyTurn = false;
+        view.setStatus("Game Over. PGN data is being sent.");
+        view.showGameOverDialog(payload, "Game Over");
+    }
+
+    private void handleLegalMoves(String payload) {
+        view.getChessBoardPanel().clearHighlights();
+        if (!payload.isEmpty()) {
+            Set<Square> legalSquares = Arrays.stream(payload.split(" ")).map(Square::fromAlgebraic).collect(Collectors.toSet());
+            view.getChessBoardPanel().highlightLegalMoves(legalSquares);
+        }
+    }
+
+    // ... other methods (handleSavePgn, BoardMouseListener, etc.) are unchanged ...
     private void handleSavePgn() {
         if (finalPgn == null || finalPgn.isEmpty()) {
-            JOptionPane.showMessageDialog(view, "No PGN data available to save.", "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(view, "No PGN data available to save. The file might be empty.", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
         JFileChooser fileChooser = new JFileChooser();

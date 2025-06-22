@@ -1,7 +1,7 @@
 package main.view;
 
 import main.model.Board.Board;
-import main.model.Square; // Import the correct Square class
+import main.common.Square; // Import the correct Square class
 import main.model.pieces.Piece;
 import javax.swing.*;
 import java.awt.*;
