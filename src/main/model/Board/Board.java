@@ -245,32 +245,47 @@ public class Board {
 
     // In main/model/Board/Board.java
 
+    // In main/model/Board/Board.java
+
     public boolean isLegalMove(Square start, Square end) {
         Piece piece = getPiece(start);
+        // Basic sanity checks
         if (piece == null || piece.getColor() != turn) return false;
         if (start.equals(end)) return false;
 
-        // Check 1: Is the move pattern valid for the piece?
-        if (!piece.isValidMove(start, end, this)) {
-            // Allow for castling, which isn't a standard piece move
-            if (!(piece instanceof King && Math.abs(start.file() - end.file()) == 2 && isCastleLegal(start, end))) {
-                return false;
-            }
+        // --- RESTRUCTURED AND CORRECTED LOGIC ---
+
+        // Step 1: Handle special moves first. Is this a castling attempt?
+        // --- THIS IS THE CRITICAL FIX ---
+        // A castle is ONLY a two-square horizontal move on the same rank.
+        boolean isCastleAttempt = piece instanceof King &&
+                Math.abs(start.file() - end.file()) == 2 &&
+                start.rank() == end.rank();
+
+        if (isCastleAttempt) {
+            // If it is a castle attempt, its legality depends *only* on the castling rules.
+            return isCastleLegal(start, end);
         }
 
-        // Check 2: Are we capturing our own piece?
-        Piece targetPiece = getPiece(end);
-        if (targetPiece != null && targetPiece.getColor() == turn) return false;
+        // Step 2: If it's not a castling move, check the standard move pattern for the piece.
+        if (!piece.isValidMove(start, end, this)) {
+            return false;
+        }
 
-        // Check 3: Does this move leave our king in check?
+        // Step 3: Prevent capturing your own pieces.
+        Piece targetPiece = getPiece(end);
+        if (targetPiece != null && targetPiece.getColor() == turn) {
+            return false;
+        }
+
+        // Step 4 (Final Check): Simulate the move to ensure it does not leave the king in check.
         boolean isEnPassantMove = piece instanceof Pawn && end.equals(getEnPassantTargetSquare());
         Square capturedPawnSquare = null;
         Piece capturedPawn = null;
 
-        // --- Simulate the move ---
+        // --- Simulate ---
         setPiece(end, piece);
         setPiece(start, null);
-
         if (isEnPassantMove) {
             int capturedRank = piece.getColor() == Colour.WHITE ? end.rank() + 1 : end.rank() - 1;
             capturedPawnSquare = new Square(capturedRank, end.file());
@@ -280,10 +295,9 @@ public class Board {
 
         boolean leavesKingInCheck = isInCheck(turn);
 
-        // --- Undo the simulation ---
+        // --- Undo Simulation ---
         setPiece(start, piece);
         setPiece(end, targetPiece);
-
         if (isEnPassantMove) {
             setPiece(capturedPawnSquare, capturedPawn);
         }
@@ -291,25 +305,44 @@ public class Board {
         return !leavesKingInCheck;
     }
 
+    // In main/model/Board/Board.java
+
     private boolean isCastleLegal(Square kingStart, Square kingEnd) {
+        // Rule 1: King cannot be in check.
         if (isInCheck(turn)) return false;
+
         Colour enemyColor = (turn == Colour.WHITE) ? Colour.BLACK : Colour.WHITE;
         int rank = kingStart.rank();
+
+        // Kingside Castle
         if (kingEnd.file() > kingStart.file()) {
             boolean canKingside = (turn == Colour.WHITE) ? whiteKingsideCastleRight : blackKingsideCastleRight;
             if (!canKingside) return false;
-            Square path1 = new Square(rank, 5);
-            Square path2 = new Square(rank, 6);
+
+            Square path1 = new Square(rank, 5); // f1/f8
+            Square path2 = new Square(rank, 6); // g1/g8
+
+            // Rule 2: Path between king and rook must be clear.
             if (getPiece(path1) != null || getPiece(path2) != null) return false;
-            return !isSquareAttackedBy(kingStart, enemyColor) && !isSquareAttackedBy(path1, enemyColor) && !isSquareAttackedBy(path2, enemyColor);
-        } else {
+
+            // Rule 3: King cannot pass through an attacked square.
+            // isSquareAttackedBy checks the king's start square implicitly.
+            return !isSquareAttackedBy(path1, enemyColor) && !isSquareAttackedBy(path2, enemyColor);
+        }
+        // Queenside Castle
+        else {
             boolean canQueenside = (turn == Colour.WHITE) ? whiteQueensideCastleRight : blackQueensideCastleRight;
             if (!canQueenside) return false;
-            Square path1 = new Square(rank, 3);
-            Square path2 = new Square(rank, 2);
-            Square path3 = new Square(rank, 1);
+
+            Square path1 = new Square(rank, 3); // d1/d8
+            Square path2 = new Square(rank, 2); // c1/c8
+            Square path3 = new Square(rank, 1); // b1/b8
+
+            // Rule 2: Path must be clear.
             if (getPiece(path1) != null || getPiece(path2) != null || getPiece(path3) != null) return false;
-            return !isSquareAttackedBy(kingStart, enemyColor) && !isSquareAttackedBy(path1, enemyColor) && !isSquareAttackedBy(path2, enemyColor);
+
+            // Rule 3: King cannot pass through an attacked square.
+            return !isSquareAttackedBy(path1, enemyColor) && !isSquareAttackedBy(path2, enemyColor);
         }
     }
 
