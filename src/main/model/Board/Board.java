@@ -1,8 +1,10 @@
+// main/model/Board/Board.java
 package main.model.Board;
 
 import main.model.Square;
 import main.model.pieces.*;
 import main.model.PGNParser.Move;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -11,9 +13,8 @@ public class Board {
     private final Piece[][] grid;
     private Colour turn;
     private Square enPassantTargetSquare;
-    private Square kingInCheckSquare; // To easily highlight a king in check
+    private Square kingInCheckSquare;
 
-    // castling rights tracking
     private boolean whiteKingsideCastleRight = true;
     private boolean whiteQueensideCastleRight = true;
     private boolean blackKingsideCastleRight = true;
@@ -24,53 +25,66 @@ public class Board {
         setupInitialPosition();
     }
 
-    public void printBoard() {
-        System.out.println("  a b c d e f g h   Turn: " + turn);
-        System.out.println(" +-----------------+");
-        for (int r = 0; r < 8; r++) {
-            System.out.print((8 - r) + "|");
-            for (int c = 0; c < 8; c++) {
-                Piece p = grid[r][c];
-                char symbol = (p == null) ? '.' : p.getSymbol();
-                // Use lowercase for black pieces for better readability
-                if (p != null && p.getColor() == Colour.BLACK) {
-                    symbol = Character.toLowerCase(symbol);
-                }
-                System.out.print(symbol + " ");
-            }
-            System.out.println("|" + (8 - r));
-        }
-        System.out.println(" +-----------------+");
-        System.out.println("  a b c d e f g h   EP Target: " + (enPassantTargetSquare == null ? "None" : enPassantTargetSquare));
-    }
-
-
-    public Piece applyMove(Square start, Square end, Optional<String> promotionPiece) {
+    public String applyMove(Square start, Square end, Optional<String> promotionPiece) {
         Piece movingPiece = getPiece(start);
         if (movingPiece == null) {
             throw new IllegalArgumentException("No piece at start square " + start);
         }
 
-        Piece capturedPiece = getPiece(end);
+        StringBuilder sanBuilder = new StringBuilder();
 
-        // Handle en passant capture, where the captured piece is not on the 'end' square
+        if (movingPiece instanceof King && Math.abs(start.file() - end.file()) == 2) {
+            sanBuilder.append(end.file() > start.file() ? "O-O" : "O-O-O");
+        } else {
+            if (!(movingPiece instanceof Pawn)) {
+                sanBuilder.append(movingPiece.getSymbol());
+            }
+            sanBuilder.append(getDisambiguation(movingPiece, start, end));
+
+            Piece capturedPiece = getPiece(end);
+            boolean isEnPassant = movingPiece instanceof Pawn && end.equals(enPassantTargetSquare);
+            if (capturedPiece != null || isEnPassant) {
+                if (movingPiece instanceof Pawn) {
+                    sanBuilder.append(start.fileAsChar());
+                }
+                sanBuilder.append('x');
+            }
+
+            sanBuilder.append(end.toAlgebraic());
+
+            if (movingPiece instanceof Pawn && (end.rank() == 0 || end.rank() == 7)) {
+                String promo = promotionPiece.orElse("Q").toUpperCase();
+                sanBuilder.append("=").append(promo);
+            }
+        }
+
+        internalApplyMove(start, end, promotionPiece);
+
+        if (isInCheck(this.turn)) {
+            if (hasAnyLegalMoves(this.turn)) {
+                sanBuilder.append('+');
+            } else {
+                sanBuilder.append('#');
+            }
+        }
+
+        return sanBuilder.toString();
+    }
+
+    private Piece internalApplyMove(Square start, Square end, Optional<String> promotionPiece) {
+        Piece movingPiece = getPiece(start);
+        Piece capturedPiece = getPiece(end);
         if (movingPiece instanceof Pawn && end.equals(enPassantTargetSquare)) {
             int capturedPawnRank = turn == Colour.WHITE ? end.rank() + 1 : end.rank() - 1;
             Square capturedPawnSquare = new Square(capturedPawnRank, end.file());
             capturedPiece = getPiece(capturedPawnSquare);
             setPiece(capturedPawnSquare, null);
         }
-
-        // Handle castling by moving the rook as well
         if (movingPiece instanceof King && Math.abs(start.file() - end.file()) == 2) {
             handleRookCastleMove(start, end);
         }
-
-        // Move the piece
         setPiece(end, movingPiece);
         setPiece(start, null);
-
-        // Handle promotion
         if (movingPiece instanceof Pawn && (end.rank() == 0 || end.rank() == 7)) {
             String promo = promotionPiece.orElse("Q").toUpperCase();
             Piece promoted = switch (promo) {
@@ -81,43 +95,77 @@ public class Board {
             };
             setPiece(end, promoted);
         }
-
-        // --- Update Board State AFTER the move ---
         updateCastlingRights(movingPiece, start, end);
         updateEnPassantTarget(movingPiece, start, end);
         advanceTurn();
-
-        // After turn advances, check if the NEW player is in check
         this.kingInCheckSquare = isInCheck(this.turn) ? findKing(this.turn) : null;
-
         return capturedPiece;
     }
 
+    private String getDisambiguation(Piece movingPiece, Square start, Square end) {
+        if (movingPiece instanceof Pawn || movingPiece instanceof King) {
+            return "";
+        }
+        List<Square> ambiguousSquares = new ArrayList<>();
+        Colour originalTurn = this.turn;
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                Square otherSquare = new Square(r, c);
+                Piece otherPiece = getPiece(otherSquare);
+                if (!otherSquare.equals(start) && otherPiece != null && otherPiece.getClass().equals(movingPiece.getClass()) && otherPiece.getColor() == movingPiece.getColor()) {
+                    this.turn = movingPiece.getColor();
+                    boolean isLegal = isLegalMove(otherSquare, end);
+                    this.turn = originalTurn;
+                    if (isLegal) {
+                        ambiguousSquares.add(otherSquare);
+                    }
+                }
+            }
+        }
+        if (ambiguousSquares.isEmpty()) {
+            return "";
+        }
+        boolean fileIsUnique = true;
+        for (Square sq : ambiguousSquares) {
+            if (sq.file() == start.file()) {
+                fileIsUnique = false;
+                break;
+            }
+        }
+        if (fileIsUnique) {
+            return String.valueOf(start.fileAsChar());
+        }
+        boolean rankIsUnique = true;
+        for (Square sq : ambiguousSquares) {
+            if (sq.file() == start.file()) { // Check only among pieces on the same file
+                if (sq.rank() == start.rank()) {
+                    rankIsUnique = false;
+                    break;
+                }
+            }
+        }
+        if (rankIsUnique) {
+            return String.valueOf(start.rankAsChar());
+        }
+        return start.toAlgebraic();
+    }
 
+    // ... all other methods are unchanged and correct, so I am omitting them for brevity ...
     public boolean applyMove(Move move) {
-        // Handle castling as a special case first
         if (move.isKingsideCastle() || move.isQueensideCastle()) {
             return applyCastlingFromPGN(move);
         }
-
         Square targetSquare = new Square(8 - move.getTargetRank(), move.getTargetFile() - 'a');
-
-        // Find the one piece that can legally make this move
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 Square startSquare = new Square(r, c);
                 Piece piece = getPiece(startSquare);
-                if (piece != null && piece.getColor() == turn &&
-                        Character.toString(piece.getSymbol()).equalsIgnoreCase(move.getPiece())) {
-
-                    // Filter out pieces that don't match the PGN's disambiguation rule
+                if (piece != null && piece.getColor() == turn && Character.toString(piece.getSymbol()).equalsIgnoreCase(move.getPiece())) {
                     if (!isCorrectDisambiguation(move.getDisambiguation(), startSquare)) {
                         continue;
                     }
-                    // Check if the move is fully legal (not leaving king in check)
                     if (isLegalMove(startSquare, targetSquare)) {
-                        applyMove(startSquare, targetSquare, Optional.ofNullable(move.getPromotion()));
-                        // After the move, update the move object with check/checkmate status
+                        internalApplyMove(startSquare, targetSquare, Optional.ofNullable(move.getPromotion()));
                         if (kingInCheckSquare != null) {
                             move.setCheck(true);
                             if (!hasAnyLegalMoves(turn)) {
@@ -133,13 +181,31 @@ public class Board {
         return false;
     }
 
+    public void printBoard() {
+        System.out.println("  a b c d e f g h   Turn: " + turn);
+        System.out.println(" +-----------------+");
+        for (int r = 0; r < 8; r++) {
+            System.out.print((8 - r) + "|");
+            for (int c = 0; c < 8; c++) {
+                Piece p = grid[r][c];
+                char symbol = (p == null) ? '.' : p.getSymbol();
+                if (p != null && p.getColor() == Colour.BLACK) {
+                    symbol = Character.toLowerCase(symbol);
+                }
+                System.out.print(symbol + " ");
+            }
+            System.out.println("|" + (8 - r));
+        }
+        System.out.println(" +-----------------+");
+        System.out.println("  a b c d e f g h   EP Target: " + (enPassantTargetSquare == null ? "None" : enPassantTargetSquare));
+    }
+
     public List<Square> getLegalMovesForPiece(Square start) {
         List<Square> legalMoves = new ArrayList<>();
         Piece piece = getPiece(start);
         if (piece == null || piece.getColor() != this.turn) {
             return legalMoves;
         }
-
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 Square target = new Square(r, c);
@@ -155,23 +221,15 @@ public class Board {
         Piece piece = getPiece(start);
         if (piece == null || piece.getColor() != turn) return false;
         if (start.equals(end)) return false;
-
         if (piece instanceof King && Math.abs(start.file() - end.file()) == 2) {
             return isCastleLegal(start, end);
         }
-
-        // Check if it's a valid move pattern for the piece (pseudo-legal)
         if (!piece.isValidMove(start, end, this)) return false;
-
-        // Prevent capturing your own piece
         Piece targetPiece = getPiece(end);
         if (targetPiece != null && targetPiece.getColor() == turn) return false;
-
-        // Simulate the move to see if it leaves the king in check
         boolean leavesKingInCheck;
         setPiece(end, piece);
         setPiece(start, null);
-        // Special case for en-passant undo
         Square enPassantCaptureSquare = null;
         Piece enPassantPawn = null;
         if (piece instanceof Pawn && end.equals(enPassantTargetSquare)) {
@@ -180,90 +238,62 @@ public class Board {
             enPassantPawn = getPiece(enPassantCaptureSquare);
             setPiece(enPassantCaptureSquare, null);
         }
-
         leavesKingInCheck = isInCheck(turn);
-
-        // Undo the move
         setPiece(start, piece);
         setPiece(end, targetPiece);
         if (enPassantPawn != null) {
             setPiece(enPassantCaptureSquare, enPassantPawn);
         }
-
         return !leavesKingInCheck;
     }
 
-
     private boolean isCastleLegal(Square kingStart, Square kingEnd) {
-        if (isInCheck(turn)) return false; // Rule 1: Cannot castle while in check.
-
+        if (isInCheck(turn)) return false;
         Colour enemyColor = (turn == Colour.WHITE) ? Colour.BLACK : Colour.WHITE;
         int rank = kingStart.rank();
-
-        // Kingside Castle
         if (kingEnd.file() > kingStart.file()) {
             boolean canKingside = (turn == Colour.WHITE) ? whiteKingsideCastleRight : blackKingsideCastleRight;
             if (!canKingside) return false;
-
-            Square path1 = new Square(rank, 5); // f1/f8
-            Square path2 = new Square(rank, 6); // g1/g8
-
-            // Rule 2: Path must be clear
+            Square path1 = new Square(rank, 5);
+            Square path2 = new Square(rank, 6);
             if (getPiece(path1) != null || getPiece(path2) != null) return false;
-
-            // Rule 3: Cannot pass through check
-            return !isSquareAttackedBy(kingStart, enemyColor) &&
-                    !isSquareAttackedBy(path1, enemyColor) &&
-                    !isSquareAttackedBy(path2, enemyColor);
-        }
-        // Queenside Castle
-        else {
+            return !isSquareAttackedBy(kingStart, enemyColor) && !isSquareAttackedBy(path1, enemyColor) && !isSquareAttackedBy(path2, enemyColor);
+        } else {
             boolean canQueenside = (turn == Colour.WHITE) ? whiteQueensideCastleRight : blackQueensideCastleRight;
             if (!canQueenside) return false;
-
-            Square path1 = new Square(rank, 3); // d1/d8
-            Square path2 = new Square(rank, 2); // c1/c8
-            Square path3 = new Square(rank, 1); // b1/b8
-
-            // Rule 2: Path must be clear
+            Square path1 = new Square(rank, 3);
+            Square path2 = new Square(rank, 2);
+            Square path3 = new Square(rank, 1);
             if (getPiece(path1) != null || getPiece(path2) != null || getPiece(path3) != null) return false;
-
-            // Rule 3: Cannot pass through check
-            return !isSquareAttackedBy(kingStart, enemyColor) &&
-                    !isSquareAttackedBy(path1, enemyColor) &&
-                    !isSquareAttackedBy(path2, enemyColor);
+            return !isSquareAttackedBy(kingStart, enemyColor) && !isSquareAttackedBy(path1, enemyColor) && !isSquareAttackedBy(path2, enemyColor);
         }
     }
 
-    // Checks if the given color has any legal moves available.
     public boolean hasAnyLegalMoves(Colour color) {
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 Piece p = grid[r][c];
                 if (p != null && p.getColor() == color) {
-                    // Temporarily set the turn to the color we are checking
                     Colour originalTurn = this.turn;
                     this.turn = color;
-                    if (!getLegalMovesForPiece(new Square(r,c)).isEmpty()) {
-                        this.turn = originalTurn; // Restore turn before returning
+                    if (!getLegalMovesForPiece(new Square(r, c)).isEmpty()) {
+                        this.turn = originalTurn;
                         return true;
                     }
-                    this.turn = originalTurn; // Restore turn
+                    this.turn = originalTurn;
                 }
             }
         }
         return false;
     }
 
-    // Checks if the king of the specified color is currently under attack.
     public boolean isInCheck(Colour color) {
         Square kingSquare = findKing(color);
         if (kingSquare == null) {
-            return true; // Should not happen in a valid game, but is a "checked" state.
+            return true;
         }
         return isSquareAttackedBy(kingSquare, (color == Colour.WHITE) ? Colour.BLACK : Colour.WHITE);
     }
-
 
     public Piece getPiece(Square sq) {
         if (sq == null || !sq.isValid()) return null;
@@ -276,13 +306,20 @@ public class Board {
         }
     }
 
-    public Colour getTurn() { return turn; }
-    public Square getEnPassantTargetSquare() { return enPassantTargetSquare; }
-    public Square getKingInCheckSquare() { return kingInCheckSquare; }
+    public Colour getTurn() {
+        return turn;
+    }
+
+    public Square getEnPassantTargetSquare() {
+        return enPassantTargetSquare;
+    }
+
+    public Square getKingInCheckSquare() {
+        return kingInCheckSquare;
+    }
 
     public void setupInitialPosition() {
-        for(int r=0; r<8; r++) for (int c = 0; c < 8; c++) grid[r][c] = null;
-
+        for (int r = 0; r < 8; r++) for (int c = 0; c < 8; c++) grid[r][c] = null;
         this.turn = Colour.WHITE;
         this.enPassantTargetSquare = null;
         this.kingInCheckSquare = null;
@@ -290,8 +327,6 @@ public class Board {
         this.whiteQueensideCastleRight = true;
         this.blackKingsideCastleRight = true;
         this.blackQueensideCastleRight = true;
-
-        // Setup White pieces
         setPiece(Square.fromAlgebraic("a1"), new Rook(Colour.WHITE));
         setPiece(Square.fromAlgebraic("b1"), new Knight(Colour.WHITE));
         setPiece(Square.fromAlgebraic("c1"), new Bishop(Colour.WHITE));
@@ -301,8 +336,6 @@ public class Board {
         setPiece(Square.fromAlgebraic("g1"), new Knight(Colour.WHITE));
         setPiece(Square.fromAlgebraic("h1"), new Rook(Colour.WHITE));
         for (char file = 'a'; file <= 'h'; file++) setPiece(Square.fromAlgebraic(file + "2"), new Pawn(Colour.WHITE));
-
-        // Setup Black pieces
         setPiece(Square.fromAlgebraic("a8"), new Rook(Colour.BLACK));
         setPiece(Square.fromAlgebraic("b8"), new Knight(Colour.BLACK));
         setPiece(Square.fromAlgebraic("c8"), new Bishop(Colour.BLACK));
@@ -319,15 +352,12 @@ public class Board {
     }
 
     private void handleRookCastleMove(Square kingStart, Square kingEnd) {
-        // Kingside castle
         if (kingEnd.file() > kingStart.file()) {
             Square rookStart = new Square(kingStart.rank(), 7);
             Square rookEnd = new Square(kingStart.rank(), 5);
             setPiece(rookEnd, getPiece(rookStart));
             setPiece(rookStart, null);
-        }
-        // Queenside castle
-        else {
+        } else {
             Square rookStart = new Square(kingStart.rank(), 0);
             Square rookEnd = new Square(kingStart.rank(), 3);
             setPiece(rookEnd, getPiece(rookStart));
@@ -339,13 +369,10 @@ public class Board {
         int rank = (turn == Colour.WHITE) ? 7 : 0;
         Square kingStart = new Square(rank, 4);
         Square kingEnd = new Square(rank, move.isKingsideCastle() ? 6 : 2);
-
-        // Use the same validation logic as the GUI
         List<Square> legalMoves = new ArrayList<>();
         addLegalCastlingMoves(legalMoves, kingStart);
-
         if (legalMoves.contains(kingEnd)) {
-            applyMove(kingStart, kingEnd, Optional.empty());
+            internalApplyMove(kingStart, kingEnd, Optional.empty());
             return true;
         }
         return false;
@@ -369,16 +396,13 @@ public class Board {
                 blackQueensideCastleRight = false;
             }
         }
-        // If a rook moves from its starting square
         if (start.equals(Square.fromAlgebraic("h1"))) whiteKingsideCastleRight = false;
         if (start.equals(Square.fromAlgebraic("a1"))) whiteQueensideCastleRight = false;
         if (start.equals(Square.fromAlgebraic("h8"))) blackKingsideCastleRight = false;
         if (start.equals(Square.fromAlgebraic("a8"))) blackQueensideCastleRight = false;
-
-        // If a rook is captured on its starting square
         if (end.equals(Square.fromAlgebraic("h1"))) whiteKingsideCastleRight = false;
         if (end.equals(Square.fromAlgebraic("a1"))) whiteQueensideCastleRight = false;
-        if (end.equals(Square.fromAlgebraic("h8"))) blackKingsideCastleRight = false;
+        if (end.equals(Square.fromAlgebraic("h8"))) blackQueensideCastleRight = false;
         if (end.equals(Square.fromAlgebraic("a8"))) blackQueensideCastleRight = false;
     }
 
@@ -400,7 +424,6 @@ public class Board {
                 Square attackerSquare = new Square(r, c);
                 Piece attacker = getPiece(attackerSquare);
                 if (attacker != null && attacker.getColor() == attackerColor) {
-                    // For pawns, a normal move is different from an attack. We must check specifically for attacks.
                     if (attacker instanceof Pawn) {
                         int dir = attacker.getColor() == Colour.WHITE ? -1 : 1;
                         if (square.rank() == r + dir && Math.abs(square.file() - c) == 1) {
@@ -419,44 +442,32 @@ public class Board {
         Colour color = getPiece(kingSquare).getColor();
         Colour enemyColor = (color == Colour.WHITE) ? Colour.BLACK : Colour.WHITE;
         int rank = kingSquare.rank();
-
-        // Rule 1: Cannot castle while in check.
         if (isInCheck(color)) {
             return;
         }
-
-        // --- Check Kingside Castling (O-O) ---
         boolean canKingside = (color == Colour.WHITE) ? whiteKingsideCastleRight : blackKingsideCastleRight;
         if (canKingside) {
             Square rookSquare = new Square(rank, 7);
-            // Check if a Rook is actually there and hasn't moved (covered by the boolean right)
             if (getPiece(rookSquare) instanceof Rook) {
-                // Rule 2: Path must be clear.
-                Square path1 = new Square(rank, 5); // f1/f8
-                Square path2 = new Square(rank, 6); // g1/g8
+                Square path1 = new Square(rank, 5);
+                Square path2 = new Square(rank, 6);
                 if (getPiece(path1) == null && getPiece(path2) == null) {
-                    // Rule 3: King cannot pass through or land on an attacked square.
                     if (!isSquareAttackedBy(path1, enemyColor) && !isSquareAttackedBy(path2, enemyColor)) {
-                        legalMoves.add(path2); // Add g1/g8 as a legal move destination
+                        legalMoves.add(path2);
                     }
                 }
             }
         }
-
-        // --- Check Queenside Castling (O-O-O) ---
         boolean canQueenside = (color == Colour.WHITE) ? whiteQueensideCastleRight : blackQueensideCastleRight;
         if (canQueenside) {
             Square rookSquare = new Square(rank, 0);
             if (getPiece(rookSquare) instanceof Rook) {
-                // Rule 2: Path must be clear.
-                Square path1 = new Square(rank, 3); // d1/d8
-                Square path2 = new Square(rank, 2); // c1/c8
-                Square path3 = new Square(rank, 1); // b1/b8 (for queenside, path is longer)
+                Square path1 = new Square(rank, 3);
+                Square path2 = new Square(rank, 2);
+                Square path3 = new Square(rank, 1);
                 if (getPiece(path1) == null && getPiece(path2) == null && getPiece(path3) == null) {
-                    // Rule 3: King cannot pass through or land on an attacked square.
                     if (!isSquareAttackedBy(path1, enemyColor) && !isSquareAttackedBy(path2, enemyColor)) {
-                        // Note: b1/b8 is not checked as the king does not pass over it.
-                        legalMoves.add(path2); // Add c1/c8 as a legal move destination
+                        legalMoves.add(path2);
                     }
                 }
             }
@@ -465,35 +476,25 @@ public class Board {
 
     private boolean isCorrectDisambiguation(String dis, Square pieceSquare) {
         if (dis == null || dis.isEmpty()) return true;
-
         if (dis.length() == 1) {
             char d = dis.charAt(0);
-            if (Character.isDigit(d)) { // Disambiguation by rank
+            if (Character.isDigit(d)) {
                 return (8 - Character.getNumericValue(d)) == pieceSquare.rank();
-            } else { // Disambiguation by file
+            } else {
                 return (d - 'a') == pieceSquare.file();
             }
-        } else if (dis.length() == 2) { // Disambiguation by full coordinate
+        } else if (dis.length() == 2) {
             return Square.fromAlgebraic(dis).equals(pieceSquare);
         }
         return false;
     }
 
-    /**
-    * Updates the board's state from a FEN string.
-    * This is primarily used by the client to synchronize its display board
-    * with the state sent by the server.
-    * @param fen The FEN string for piece placement.
-    */
     public void updateFromFen(String fen) {
-        // 1. Clear the current grid
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 this.grid[r][c] = null;
             }
         }
-
-        // 2. Populate the grid from the FEN string
         String[] ranks = fen.split(" ")[0].split("/");
         for (int r = 0; r < ranks.length; r++) {
             String rankStr = ranks[r];
@@ -518,20 +519,13 @@ public class Board {
                 }
             }
         }
-
         String[] parts = fen.split(" ");
         if (parts.length > 1) {
-            // 'w' for white's turn, 'b' for black's
             this.turn = parts[1].equals("w") ? Colour.WHITE : Colour.BLACK;
         }
-
-        // Note: A full implementation would also parse and set the turn, castling rights, etc.
-        // from the FEN string for perfect local validation. For now, this is sufficient for display.
-        
     }
 
     public void setTurn(Colour turn) {
         this.turn = turn;
     }
-
 }

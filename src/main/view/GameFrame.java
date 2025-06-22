@@ -1,6 +1,9 @@
+// main/view/GameFrame.java
+
 package main.view;
 
 import main.model.pieces.*;
+import main.model.pieces.Colour;
 
 import javax.swing.*;
 import java.awt.*;
@@ -22,6 +25,8 @@ public class GameFrame extends JFrame {
 
     // PGN and Replay components
     private final JMenuItem loadPgnMenuItem;
+    // --- PGN CHANGE 1: Added a menu item for saving the PGN ---
+    private final JMenuItem savePgnMenuItem;
     private final JButton nextMoveButton;
     private final JButton prevMoveButton;
     private final JButton readyButton;
@@ -39,8 +44,14 @@ public class GameFrame extends JFrame {
         JMenuBar menuBar = new JMenuBar();
         JMenu fileMenu = new JMenu("File");
         newGameMenuItem = new JMenuItem("New Game");
-        loadPgnMenuItem = new JMenuItem("Load PGN..."); // Initialization
+        loadPgnMenuItem = new JMenuItem("Load PGN...");
+        // --- PGN CHANGE 2: Initialize and add the save menu item ---
+        savePgnMenuItem = new JMenuItem("Save PGN...");
+        savePgnMenuItem.setEnabled(false); // Disabled until a game is over
+
+        fileMenu.add(newGameMenuItem);
         fileMenu.add(loadPgnMenuItem);
+        fileMenu.add(savePgnMenuItem); // Add to menu
         menuBar.add(fileMenu);
         setJMenuBar(menuBar);
 
@@ -114,6 +125,12 @@ public class GameFrame extends JFrame {
     public JMenuItem getLoadPgnMenuItem() { return loadPgnMenuItem; }
     public JButton getNextMoveButton() { return nextMoveButton; }
     public JButton getPrevMoveButton() { return prevMoveButton; }
+    // --- PGN CHANGE 3: Getter and listener for the save menu item ---
+    public JMenuItem getSavePgnMenuItem() { return savePgnMenuItem; }
+    public void addSavePgnListener(ActionListener listener) {
+        savePgnMenuItem.addActionListener(listener);
+    }
+
 
     public void setStatus(String text) { statusLabel.setText(text); }
     public void updatePlayerInfo(Map<String, String> headers) {
