@@ -7,6 +7,8 @@ import java.net.Socket;
 public class ChessServer {
     public static void main(String[] args) {
         int port = 6789; // Port to listen on
+
+        DatabaseManager.initializeDatabase();
         System.out.println("Chess Server is starting on port " + port);
 
         try (ServerSocket serverSocket = new ServerSocket(port)) {

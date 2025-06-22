@@ -219,7 +219,11 @@ public class GameHandler implements Runnable {
      */
     private void sendPgnToClients(String result) {
         String pgn = PGNGenerator.generate(whitePlayerName, blackPlayerName, result, moveHistory);
-        // Replace newlines with a special character for transport over a single line.
+
+        String gameDate = java.time.format.DateTimeFormatter.
+                ofPattern("yyyy.MM.dd").format(java.time.LocalDate.now());
+        DatabaseManager.saveGame(whitePlayerName, blackPlayerName, result, pgn, gameDate);
+
         String pgnForTransport = pgn.replace("\n", "|");
         broadcastMessage("GAME_PGN:::" + pgnForTransport);
     }
