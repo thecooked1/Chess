@@ -200,7 +200,7 @@ public class GameHandler implements Runnable {
                 if (board.isLegalMove(start, end)) {
                     String san = board.applyMove(start, end, promo);
                     moveHistory.add(san);
-                    activePlayerOut.println("VALID_MOVE");
+                    broadcastMessage("VALID_MOVE " + san);
                     break;
                 } else {
                     activePlayerOut.println("INVALID_MOVE Move is not legal.");

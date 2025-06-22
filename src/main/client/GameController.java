@@ -33,6 +33,9 @@ public class GameController {
     private boolean isMyTurn = false;
     private Square selectedSquare = null;
 
+    private int moveNumber = 1;
+    private Colour currentTurnForLog = Colour.WHITE;
+
     private StringBuilder pgnBuilder = null;
     private String finalPgn = null;
 
@@ -87,7 +90,7 @@ public class GameController {
                 case "GAME_OVER" -> handleGameOver(payload);
                 case "LEGAL_MOVES" -> handleLegalMoves(payload);
                 case "WAITING_FOR_OPPONENT" -> view.setStatus("Waiting for opponent to be ready...");
-                case "VALID_MOVE" -> { /* No action needed, wait for state update */ }
+                case "VALID_MOVE" -> handleValidMove(payload);
                 case "INVALID_MOVE" -> {
                     view.setStatus("Invalid move: " + payload);
                     isMyTurn = true;
@@ -95,6 +98,23 @@ public class GameController {
                 case "ERROR" -> view.setStatus("Error: " + payload);
             }
         });
+    }
+
+    // In main/client/GameController.java
+
+    private void handleValidMove(String san) {
+        // A move was validated by the server. Add it to our GUI log.
+        if (san != null && !san.isEmpty()) {
+            view.addMoveToLog(moveNumber, san, currentTurnForLog);
+
+            // If it was Black's move, increment the move number for the next pair.
+            if (currentTurnForLog == Colour.BLACK) {
+                moveNumber++;
+            }
+
+            // Toggle the turn for the next log entry.
+            currentTurnForLog = (currentTurnForLog == Colour.WHITE) ? Colour.BLACK : Colour.WHITE;
+        }
     }
 
     private void handleUpdateTime(String payload) {
