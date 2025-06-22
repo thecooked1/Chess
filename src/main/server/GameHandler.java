@@ -1,11 +1,10 @@
-// main/server/GameHandler.java
-
 package main.server;
 
 import main.common.FenUtility;
 import main.common.Square;
 import main.model.Board.Board;
 import main.common.Colour;
+import main.model.Clock;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -16,6 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import main.PGNGenerator;
 
@@ -28,16 +29,20 @@ public class GameHandler implements Runnable {
     private final Socket blackPlayerSocket;
     private final Board board;
     private final List<String> moveHistory = new ArrayList<>();
-
     private String whitePlayerName = "White";
     private String blackPlayerName = "Black";
-    private int whiteTimePreference = 600;
-    private int blackTimePreference = 600;
 
-    private PrintWriter whiteOut;
-    private BufferedReader whiteIn;
-    private PrintWriter blackOut;
-    private BufferedReader blackIn;
+    private int whiteTimePreference = 600; // Default 10 mins
+    private int blackTimePreference = 600; // Default 10 mins
+
+    private Clock whiteClock;
+    private Clock blackClock;
+    private Timer gameTimer;
+    private boolean isGameOver = false;
+
+    private PrintWriter whiteOut, blackOut;
+    private BufferedReader whiteIn, blackIn;
+
 
     public GameHandler(Socket whitePlayerSocket, Socket blackPlayerSocket) {
         this.whitePlayerSocket = whitePlayerSocket;
@@ -53,7 +58,7 @@ public class GameHandler implements Runnable {
             mainGameLoop();
         } catch (IOException | InterruptedException e) {
             System.out.println("Game handler error: " + e.getMessage());
-            sendPgnToClients("*"); // Game terminated unexpectedly
+            endGame("Game terminated unexpectedly.", "*");
         } finally {
             closeConnections();
         }
@@ -86,55 +91,99 @@ public class GameHandler implements Runnable {
         whiteOut.println("OPPONENT_NAME " + blackPlayerName);
         blackOut.println("OPPONENT_NAME " + whitePlayerName);
 
+
         int gameTimeSeconds = (whiteTimePreference + blackTimePreference) / 2;
+
+
+        this.whiteClock = new Clock( gameTimeSeconds);
+        this.blackClock = new Clock(gameTimeSeconds);
+
         broadcastMessage("GAME_START " + gameTimeSeconds + " " + gameTimeSeconds);
+
+        startServerTimer();
     }
 
     /**
      * Contains the main loop that alternates turns until the game is over.
      */
     private void mainGameLoop() throws IOException {
-        while (true) {
+        while (!isGameOver) {
             broadcastState();
 
-            if (isGameOver()) {
-                break;
-            }
-
-            if (board.getTurn() == Colour.WHITE) {
-                handlePlayerTurn(whiteOut, whiteIn, blackOut);
+            if (board.hasAnyLegalMoves(board.getTurn())) {
+                if (board.getTurn() == Colour.WHITE) {
+                    handlePlayerTurn(whiteOut, whiteIn, blackOut);
+                } else {
+                    handlePlayerTurn(blackOut, blackIn, whiteOut);
+                }
             } else {
-                handlePlayerTurn(blackOut, blackIn, whiteOut);
+                // Handle checkmate or stalemate
+                if (board.isInCheck(board.getTurn())) {
+                    String winner = board.getTurn() == Colour.WHITE ? "Black" : "White";
+                    endGame("Checkmate! " + winner + " wins.", winner.equals("White") ? "1-0" : "0-1");
+                } else {
+                    endGame("Stalemate! The game is a draw.", "1/2-1/2");
+                }
             }
         }
+    }
+
+    private void startServerTimer() {
+        this.gameTimer = new Timer(true); // true makes it a daemon thread
+        this.gameTimer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                if (isGameOver) {
+                    gameTimer.cancel();
+                    return;
+                }
+
+                boolean whiteTimedOut = whiteClock.decrement();
+                boolean blackTimedOut = blackClock.decrement();
+
+                broadcastMessage("UPDATE_TIME " + whiteClock.getTime() + " " + blackClock.getTime());
+
+
+
+                // Send time updates to both clients every second
+                broadcastMessage("UPDATE_TIME " + whiteClock.getTime() + " " + blackClock.getTime());
+
+                if (whiteTimedOut) {
+                    endGame("Time's up! Black wins.", "0-1");
+                } else if (blackTimedOut) {
+                    endGame("Time's up! White wins.", "1-0");
+                }
+            }
+        }, 1000, 1000);
     }
 
     /**
-     * Checks for game-ending conditions like checkmate or stalemate and handles them.
-     *
-     * @return true if the game is over, false otherwise.
+     * A centralized method to end the game, stop timers, and notify clients.
      */
-    private boolean isGameOver() {
-        if (board.hasAnyLegalMoves(board.getTurn())) {
-            return false;
+    private void endGame(String message, String result) {
+        if (isGameOver) return; // Prevent multiple calls
+
+        this.isGameOver = true;
+        if (gameTimer != null) {
+            gameTimer.cancel();
         }
 
-        String result;
-        String message;
-        if (board.isInCheck(board.getTurn())) {
-            message = "Checkmate! " + (board.getTurn() == Colour.WHITE ? "Black" : "White") + " wins.";
-            result = (board.getTurn() == Colour.WHITE) ? "0-1" : "1-0";
-        } else {
-            message = "Stalemate! The game is a draw.";
-            result = "1/2-1/2";
-        }
+        whiteClock.stop();
+        blackClock.stop();
+
         broadcastMessage("GAME_OVER " + message);
         sendPgnToClients(result);
-        return true;
     }
 
+
     private void handlePlayerTurn(PrintWriter activePlayerOut, BufferedReader activePlayerIn, PrintWriter opponentOut) throws IOException {
-        // ... This method is already clean and focused, no changes needed ...
+        if (board.getTurn() == Colour.WHITE) {
+            whiteClock.start();
+            blackClock.stop();
+        } else {
+            blackClock.start();
+            whiteClock.stop();
+        }
         activePlayerOut.println("YOUR_TURN");
         opponentOut.println("OPPONENT_TURN");
         while (true) {
@@ -184,11 +233,14 @@ public class GameHandler implements Runnable {
                 String[] parts = line.split(" ", 2);
                 String command = parts[0];
                 String payload = parts.length > 1 ? parts[1] : "";
+
                 switch (command) {
                     case "SET_NAME":
                         if (isWhite) whitePlayerName = payload;
                         else blackPlayerName = payload;
                         break;
+
+                    // --- ADD THIS CASE BACK ---
                     case "SET_TIME":
                         try {
                             int time = Integer.parseInt(payload);
@@ -196,9 +248,12 @@ public class GameHandler implements Runnable {
                             else blackTimePreference = time;
                         } catch (NumberFormatException e) { /* Ignore */ }
                         break;
+
                     case "PLAYER_READY":
                         PrintWriter out = isWhite ? whiteOut : blackOut;
-                        out.println("WAITING_FOR_OPPONENT");
+                        if (out != null) {
+                            out.println("WAITING_FOR_OPPONENT");
+                        }
                         readySet = true;
                         break;
                 }

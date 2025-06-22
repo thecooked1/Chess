@@ -1,18 +1,20 @@
 package main.view;
 
-
 public class GameSettings {
-    public final String whitePlayerName;
-    public final String blackPlayerName;
+    // --- SIMPLIFIED: Only needs to know this player's name ---
+    public final String playerName;
     public final int initialHours;
     public final int initialMinutes;
     public final int initialSeconds;
 
-    public GameSettings(String whitePlayerName, String blackPlayerName, int hours, int minutes, int seconds) {
-        this.whitePlayerName = whitePlayerName;
-        this.blackPlayerName = blackPlayerName;
+    public GameSettings(String playerName, int hours, int minutes, int seconds) {
+        this.playerName = playerName;
         this.initialHours = hours;
         this.initialMinutes = minutes;
         this.initialSeconds = seconds;
+    }
+
+    public int getTotalSeconds() {
+        return (initialHours * 3600) + (initialMinutes * 60) + initialSeconds;
     }
 }

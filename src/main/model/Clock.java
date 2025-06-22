@@ -1,3 +1,4 @@
+// main/model/Clock.java
 package main.model;
 
 public class Clock {
@@ -13,14 +14,27 @@ public class Clock {
         this.running = false; // Start paused
     }
 
+    // --- ADD THIS NEW CONSTRUCTOR ---
+    /**
+     * Creates a clock from a total number of seconds.
+     * @param totalSeconds The total time in seconds.
+     */
+    public Clock(int totalSeconds) {
+        if (totalSeconds < 0) totalSeconds = 0;
+        this.hh = totalSeconds / 3600;
+        this.mm = (totalSeconds % 3600) / 60;
+        this.ss = totalSeconds % 60;
+        this.running = false; // Start paused
+    }
+
     public boolean isRunning() { return running; }
     public void start() { this.running = true; }
     public void stop() { this.running = false; }
-    public boolean outOfTime() { return (hh <= 0 && mm <= 0 && ss <= 0); }
+    public boolean isOutOfTime() { return (hh <= 0 && mm <= 0 && ss <= 0); }
 
     public boolean decrement() {
-        if (!running || outOfTime()) {
-            return outOfTime();
+        if (!running || isOutOfTime()) {
+            return isOutOfTime();
         }
         if (ss > 0) {
             ss--;

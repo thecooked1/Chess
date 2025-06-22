@@ -8,6 +8,7 @@ import main.common.Square;
 import main.view.GameFrame;
 import main.model.Board.*;
 import main.model.Clock;
+import main.view.GameSettings;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -18,12 +19,7 @@ import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.Optional;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class GameController {
@@ -36,16 +32,19 @@ public class GameController {
     private String opponentName = "Opponent";
     private boolean isMyTurn = false;
     private Square selectedSquare = null;
-    private Timer swingTimer;
-    private Clock myClock;
-    private Clock opponentClock;
+
     private StringBuilder pgnBuilder = null;
     private String finalPgn = null;
 
-    public GameController() {
+    public GameController(String myPlayerName, int totalTimeInSeconds) {
         this.view = new GameFrame();
         this.displayBoard = new Board();
-        this.networkHandler = new NetworkHandler("127.0.0.1", 6789, this::handleServerMessage);
+        List<String> initialMessages = Arrays.asList(
+                "SET_NAME " + myPlayerName,
+                "SET_TIME " + totalTimeInSeconds
+        );
+        this.networkHandler = new NetworkHandler("127.0.0.1", 6789, this::handleServerMessage, initialMessages);
+        this.myName = myPlayerName;
         this.initListeners();
         this.view.setVisible(true);
         view.setStatus("Connecting to server...");
@@ -78,7 +77,7 @@ public class GameController {
             String payload = parts.length > 1 ? parts[1] : "";
 
             switch (command) {
-                case "CONNECTED" -> handleConnected();
+                case "UPDATE_TIME"  -> handleUpdateTime(payload);
                 case "ASSIGN_COLOR" -> handleAssignColor(payload);
                 case "OPPONENT_NAME" -> handleOpponentName(payload);
                 case "GAME_START" -> handleGameStart(payload);
@@ -96,6 +95,16 @@ public class GameController {
                 case "ERROR" -> view.setStatus("Error: " + payload);
             }
         });
+    }
+
+    private void handleUpdateTime(String payload) {
+        String[] times = payload.split(" ");
+        if (times.length == 2) {
+            String whiteTime = times[0];
+            String blackTime = times[1];
+            view.updateClock(Colour.WHITE, whiteTime);
+            view.updateClock(Colour.BLACK, blackTime);
+        }
     }
 
     /**
@@ -123,33 +132,6 @@ public class GameController {
         return false;
     }
 
-    // --- Specific Handler Methods for each Server Command ---
-
-    private void handleConnected() {
-        JTextField nameField = new JTextField("Player");
-        JTextField timeField = new JTextField("10");
-        JPanel panel = new JPanel(new GridLayout(0, 2, 5, 5));
-        panel.add(new JLabel("Your Name:"));
-        panel.add(nameField);
-        panel.add(new JLabel("Time per side (minutes):"));
-        panel.add(timeField);
-        int result = JOptionPane.showConfirmDialog(view, panel, "Game Setup", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (result == JOptionPane.OK_OPTION) {
-            this.myName = nameField.getText().trim().isEmpty() ? "Guest" : nameField.getText().trim();
-            int timeMinutes = 10;
-            try {
-                timeMinutes = Integer.parseInt(timeField.getText().trim());
-                if (timeMinutes < 1) timeMinutes = 1;
-            } catch (NumberFormatException e) {
-            }
-            networkHandler.sendMessage("SET_NAME " + this.myName);
-            networkHandler.sendMessage("SET_TIME " + (timeMinutes * 60));
-            view.setStatus("Settings sent. Click 'Ready' to start.");
-        } else {
-            System.exit(0);
-        }
-    }
-
     private void handleAssignColor(String payload) {
         this.myColor = Colour.valueOf(payload);
         view.setTitle("Chess Client - Playing as " + payload);
@@ -171,11 +153,8 @@ public class GameController {
     private void handleGameStart(String payload) {
         view.getReadyButton().setVisible(false);
         view.setStatus("Game started!");
-        int gameTimeSeconds = Integer.parseInt(payload.split(" ")[0]);
-        this.myClock = new Clock(0, 0, gameTimeSeconds);
-        this.opponentClock = new Clock(0, 0, gameTimeSeconds);
-        this.swingTimer = new Timer(1000, e -> updateClocks());
-        this.swingTimer.start();
+        handleUpdateTime(payload);
+
     }
 
     private void handleUpdateState(String payload) {
@@ -187,20 +166,15 @@ public class GameController {
         this.isMyTurn = true;
         displayBoard.setTurn(myColor);
         view.setStatus("Your turn.");
-        if (myClock != null) myClock.start();
-        if (opponentClock != null) opponentClock.stop();
     }
 
     private void handleOpponentTurn() {
         this.isMyTurn = false;
         displayBoard.setTurn(myColor == Colour.WHITE ? Colour.BLACK : Colour.WHITE);
         view.setStatus("Opponent's turn.");
-        if (myClock != null) myClock.stop();
-        if (opponentClock != null) opponentClock.start();
     }
 
     private void handleGameOver(String payload) {
-        if (swingTimer != null) swingTimer.stop();
         isMyTurn = false;
         view.setStatus("Game Over. PGN data is being sent.");
         view.showGameOverDialog(payload, "Game Over");
@@ -247,35 +221,6 @@ public class GameController {
         view.setStatus("Ready! Waiting for opponent...");
     }
 
-    private void updateClocks() {
-        boolean timeout = false;
-        boolean didIWin = false;
-        if (myClock != null && myClock.isRunning()) {
-            if (myClock.decrement()) {
-                timeout = true;
-                didIWin = false;
-            }
-        }
-        if (opponentClock != null && opponentClock.isRunning()) {
-            if (opponentClock.decrement()) {
-                timeout = true;
-                didIWin = true;
-            }
-        }
-        if (myClock != null) view.updateClock(myColor, myClock.getTime());
-        if (opponentClock != null)
-            view.updateClock(myColor == Colour.WHITE ? Colour.BLACK : Colour.WHITE, opponentClock.getTime());
-        if (timeout) {
-            handleTimeout(didIWin);
-        }
-    }
-
-    private void handleTimeout(boolean didIWin) {
-        if (swingTimer != null) swingTimer.stop();
-        isMyTurn = false;
-        view.setStatus("Time's up! You " + (didIWin ? "win!" : "lose."));
-        view.showGameOverDialog("Time's up! You " + (didIWin ? "win!" : "lose."), "Game Over");
-    }
 
     private void attemptUserMove(Square start, Square end) {
         if (!isMyTurn) return;
