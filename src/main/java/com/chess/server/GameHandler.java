@@ -79,6 +79,8 @@ public class GameHandler implements Runnable {
         this.humanPlayer1 = humanPlayer;
         this.humanPlayer2 = null; // No second human player.
         this.board = new Board();
+        this.whiteClock = null;
+        this.blackClock = null;
 
         // Randomly assign color to the human
         if (Math.random() > 0.5) {
@@ -94,10 +96,6 @@ public class GameHandler implements Runnable {
             this.whitePlayerName = botPlayer.getUsername();
             this.blackPlayerName = humanPlayer.getUsername();
         }
-
-        int gameTime = humanPlayer.getPreferredTime();
-        this.whiteClock = new Clock(gameTime);
-        this.blackClock = new Clock(gameTime);
     }
 
     @Override
@@ -130,8 +128,15 @@ public class GameHandler implements Runnable {
         if (whiteHumanHandler != null) whiteHumanHandler.sendMessage("OPPONENT_NAME " + blackPlayerName);
         if (blackHumanHandler != null) blackHumanHandler.sendMessage("OPPONENT_NAME " + whitePlayerName);
 
-        broadcastMessage("GAME_START " + whiteClock.getTime() + " " + blackClock.getTime());
-        startServerTimer();
+        if (this.botPlayer == null) { // This is a human vs. human game
+            broadcastMessage("GAME_START " + whiteClock.getTime() + " " + blackClock.getTime());
+            startServerTimer();
+        } else { // This is a bot game
+            // Send a different GAME_START message without time, or just let client handle it
+            // based on opponent name. For simplicity, we just won't start the timer.
+            // We still need to tell the client the game started.
+            broadcastMessage("GAME_START no_time");
+        }
     }
 
     /**
@@ -198,12 +203,14 @@ public class GameHandler implements Runnable {
      * from the message queue until a valid move is made.
      */
     private void handlePlayerTurn(ClientHandler activeHuman) throws InterruptedException {
-        if (board.getTurn() == Colour.WHITE) {
-            whiteClock.start();
-            blackClock.stop();
-        } else {
-            blackClock.start();
-            whiteClock.stop();
+        if (whiteClock != null && blackClock != null) {
+            if (board.getTurn() == Colour.WHITE) {
+                whiteClock.start();
+                blackClock.stop();
+            } else {
+                blackClock.start();
+                whiteClock.stop();
+            }
         }
         activeHuman.sendMessage("YOUR_TURN");
         // Tell the other player(s) it's the opponent's turn
@@ -290,15 +297,16 @@ public class GameHandler implements Runnable {
                     return;
                 }
 
-                boolean whiteTimedOut = whiteClock.decrement();
-                boolean blackTimedOut = blackClock.decrement();
+                if (whiteClock != null && blackClock != null) {
+                    boolean whiteTimedOut = whiteClock.decrement();
+                    boolean blackTimedOut = blackClock.decrement();
+                    broadcastMessage("UPDATE_TIME " + whiteClock.getTime() + " " + blackClock.getTime());
 
-                broadcastMessage("UPDATE_TIME " + whiteClock.getTime() + " " + blackClock.getTime());
-
-                if (whiteTimedOut) {
-                    endGame("Time's up! Black wins.", "0-1");
-                } else if (blackTimedOut) {
-                    endGame("Time's up! White wins.", "1-0");
+                    if (whiteTimedOut) {
+                        endGame("Time's up! Black wins.", "0-1");
+                    } else if (blackTimedOut) {
+                        endGame("Time's up! White wins.", "1-0");
+                    }
                 }
             }
         }, 1000, 1000);

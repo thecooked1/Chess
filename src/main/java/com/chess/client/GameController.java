@@ -50,7 +50,7 @@ public class GameController {
 
         // Send post-login setup info to the server
         this.networkHandler.sendMessage("SET_TIME " + timeInSeconds);
-        view.setStatus("Logged in as " + myName + ". Click 'Ready' to find a match.");
+        view.setStatus("Logged in as " + myName + ". Choose a game mode.");
     }
 
     private void initListeners() {
@@ -168,6 +168,11 @@ public class GameController {
             names.put("Black", myName + " (You)");
         }
         view.updatePlayerInfo(names);
+
+        if (this.opponentName.startsWith("Chess Bot")) {
+            view.setClocksVisible(false);
+        }
+
     }
 
     private void handlePlayBotButton() {

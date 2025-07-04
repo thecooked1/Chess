@@ -26,6 +26,11 @@ public class GameFrame extends JFrame {
     private final JButton readyButton;
     private final JButton playBotButton;
 
+    public void setClocksVisible(boolean visible) {
+        whiteClockLabel.setVisible(visible);
+        blackClockLabel.setVisible(visible);
+    }
+
     // --- MOVE LOG: Add a JTextArea for the move log ---
     private final JTextArea moveLogArea;
 

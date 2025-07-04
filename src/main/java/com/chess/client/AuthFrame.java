@@ -10,6 +10,7 @@ public class AuthFrame extends JFrame {
     private final NetworkHandler networkHandler;
     private JTextField usernameField;
     private JPasswordField passwordField;
+    private JComboBox<String> timeControlComboBox;
 
     public AuthFrame(NetworkHandler networkHandler) {
         this.networkHandler = networkHandler;
@@ -17,13 +18,23 @@ public class AuthFrame extends JFrame {
         this.networkHandler.setMessageConsumer(this::handleServerMessage);
 
         setTitle("Chess - Login or Register");
-        setSize(350, 200);
+        setSize(400, 220);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
         // Components
         usernameField = new JTextField(20);
         passwordField = new JPasswordField(20);
+
+        String[] timeOptions = {
+                "10 minutes (Standard)",
+                "5 minutes (Blitz)",
+                "3 minutes (Bullet)",
+                "15 minutes (Rapid)",
+                "1 minute (Hyperbullet)"
+        };
+        timeControlComboBox = new JComboBox<>(timeOptions);
+
         JButton loginButton = new JButton("Login");
         JButton registerButton = new JButton("Register");
 
@@ -35,11 +46,13 @@ public class AuthFrame extends JFrame {
         gbc.gridx = 1; gbc.gridy = 0; add(usernameField, gbc);
         gbc.gridx = 0; gbc.gridy = 1; add(new JLabel("Password:"), gbc);
         gbc.gridx = 1; gbc.gridy = 1; add(passwordField, gbc);
+        gbc.gridx = 0; gbc.gridy = 2; add(new JLabel("Time Control:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 2; add(timeControlComboBox, gbc);
 
         JPanel buttonPanel = new JPanel();
         buttonPanel.add(loginButton);
         buttonPanel.add(registerButton);
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; add(buttonPanel, gbc);
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; add(buttonPanel, gbc);
 
         // Listeners
         loginButton.addActionListener(this::onLogin);
@@ -79,8 +92,8 @@ public class AuthFrame extends JFrame {
                     // Login was successful! Close this auth window and start the game.
                     this.dispose(); // Close the login frame
                     String username = parts[1];
-                    // For now, let's use a default time. A settings dialog could be added here.
-                    int timeInSeconds = 600; // 10 minutes
+                    String selectedTime = (String) timeControlComboBox.getSelectedItem();
+                    int timeInSeconds = parseTime(selectedTime);
                     // Launch the main GameController
                     new GameController(username, timeInSeconds, this.networkHandler);
                     break;
@@ -96,4 +109,17 @@ public class AuthFrame extends JFrame {
             }
         });
     }
+
+    private int parseTime(String timeString) {
+        if (timeString == null) return 600; // Default 10 minutes
+        // Extracts the number from the string (e.g., "10 minutes..." -> 10)
+        String minutesStr = timeString.split(" ")[0];
+        try {
+            int minutes = Integer.parseInt(minutesStr);
+            return minutes * 60;
+        } catch (NumberFormatException e) {
+            return 600; // Default on parsing error
+        }
+    }
+
 }
