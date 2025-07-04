@@ -114,6 +114,14 @@ public class ClientHandler implements Runnable {
                 }
                 sendMessage("INFO Acknowledged_ready");
                 ready = true; // Set flag to exit the loop.
+
+            } else if (command.equals("PLAY_BOT")) {
+                sendMessage("INFO Creating_game_with_bot");
+                // Directly start a game against a bot instead of going to the matchmaker.
+                new Thread(new GameHandler(this)).start();
+                ready = true; // Mark setup as complete.
+                break; // Break from setup, the thread will now wait on the latch.
+
             } else {
                 // This is where "SET_NAME" would have been caught.
                 sendMessage("ERROR Unexpected_command_in_setup_phase:_" + command);

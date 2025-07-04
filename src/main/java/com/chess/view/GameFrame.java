@@ -24,6 +24,7 @@ public class GameFrame extends JFrame {
     private final JMenuItem loadPgnMenuItem;
     private final JMenuItem savePgnMenuItem;
     private final JButton readyButton;
+    private final JButton playBotButton;
 
     // --- MOVE LOG: Add a JTextArea for the move log ---
     private final JTextArea moveLogArea;
@@ -74,8 +75,10 @@ public class GameFrame extends JFrame {
 
         JPanel buttonPanel = new JPanel(new FlowLayout());
         readyButton = new JButton("Ready");
+        playBotButton = new JButton("Play with Bot");
         quitButton = new JButton("Quit");
         buttonPanel.add(readyButton);
+        buttonPanel.add(playBotButton);
         buttonPanel.add(quitButton);
         add(buttonPanel, BorderLayout.SOUTH);
 
@@ -114,6 +117,14 @@ public class GameFrame extends JFrame {
             // Append Black's move to the existing line
             moveLogArea.append(String.format("%-8s\n", moveSan));
         }
+    }
+
+    public JButton getPlayBotButton() {
+        return playBotButton;
+    }
+
+    public void addPlayBotListener(ActionListener listener) {
+        playBotButton.addActionListener(listener);
     }
 
     public JButton getReadyButton() { return readyButton; }

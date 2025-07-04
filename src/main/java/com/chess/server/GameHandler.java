@@ -25,11 +25,18 @@ import java.util.stream.Collectors;
  */
 public class GameHandler implements Runnable {
 
-    // Player and game state fields
-    private final ClientHandler whitePlayer;
-    private final ClientHandler blackPlayer;
+    // --- Player and Game State Fields ---
+    private final ClientHandler humanPlayer1;
+    private final ClientHandler humanPlayer2; // Is NULL if it's a bot game
+    private final BotPlayer botPlayer;       // Is NULL if it's a human vs human game
     private final Board board;
     private final List<String> moveHistory = new ArrayList<>();
+
+    // --- Correctly Scoped Player Information ---
+    private final String whitePlayerName;
+    private final String blackPlayerName;
+    private final ClientHandler whiteHumanHandler; // The human client playing white (can be null)
+    private final ClientHandler blackHumanHandler;
 
     // Clocks and timing
     private final Clock whiteClock;
@@ -44,77 +51,86 @@ public class GameHandler implements Runnable {
     // A simple record to associate an incoming message with the player who sent it.
     private record PlayerMessage(ClientHandler player, String message) {}
 
-    /**
-     * Constructor for the GameHandler.
-     * @param player1 The first authenticated client.
-     * @param player2 The second authenticated client.
-     */
+    // --- CONSTRUCTOR FOR HUMAN vs HUMAN ---
     public GameHandler(ClientHandler player1, ClientHandler player2) {
-        // Randomly assign colors to the players.
-        if (Math.random() > 0.5) {
-            this.whitePlayer = player1;
-            this.blackPlayer = player2;
-        } else {
-            this.whitePlayer = player2;
-            this.blackPlayer = player1;
-        }
-
+        this.humanPlayer1 = player1;
+        this.humanPlayer2 = player2;
+        this.botPlayer = null; // No bot in this game.
         this.board = new Board();
 
-        // Calculate the game time based on players' preferences.
-        int gameTimeSeconds = (whitePlayer.getPreferredTime() + blackPlayer.getPreferredTime()) / 2;
-        this.whiteClock = new Clock(gameTimeSeconds);
-        this.blackClock = new Clock(gameTimeSeconds);
+        // Randomly assign colors
+        if (Math.random() > 0.5) {
+            this.whiteHumanHandler = player1;
+            this.blackHumanHandler = player2;
+        } else {
+            this.whiteHumanHandler = player2;
+            this.blackHumanHandler = player1;
+        }
+        this.whitePlayerName = whiteHumanHandler.getUsername();
+        this.blackPlayerName = blackHumanHandler.getUsername();
+
+        int gameTime = (player1.getPreferredTime() + player2.getPreferredTime()) / 2;
+        this.whiteClock = new Clock(gameTime);
+        this.blackClock = new Clock(gameTime);
+    }
+
+    // --- CONSTRUCTOR FOR HUMAN vs BOT ---
+    public GameHandler(ClientHandler humanPlayer) {
+        this.humanPlayer1 = humanPlayer;
+        this.humanPlayer2 = null; // No second human player.
+        this.board = new Board();
+
+        // Randomly assign color to the human
+        if (Math.random() > 0.5) {
+            this.whiteHumanHandler = humanPlayer;
+            this.blackHumanHandler = null;
+            this.botPlayer = new BotPlayer(Colour.BLACK, this, this.board);
+            this.whitePlayerName = humanPlayer.getUsername();
+            this.blackPlayerName = botPlayer.getUsername();
+        } else {
+            this.blackHumanHandler = humanPlayer;
+            this.whiteHumanHandler = null;
+            this.botPlayer = new BotPlayer(Colour.WHITE, this, this.board);
+            this.whitePlayerName = botPlayer.getUsername();
+            this.blackPlayerName = humanPlayer.getUsername();
+        }
+
+        int gameTime = humanPlayer.getPreferredTime();
+        this.whiteClock = new Clock(gameTime);
+        this.blackClock = new Clock(gameTime);
     }
 
     @Override
     public void run() {
         try {
-            // Start two dedicated listener threads. Each one reads from one client's socket
-            // and puts messages into our shared queue. This prevents blocking.
-            Thread whiteListener = new Thread(new ClientMessageListener(whitePlayer));
-            Thread blackListener = new Thread(new ClientMessageListener(blackPlayer));
-            whiteListener.start();
-            blackListener.start();
+            // Start listener threads for all human players in the game.
+            if (whiteHumanHandler != null) new Thread(new ClientMessageListener(whiteHumanHandler)).start();
+            if (blackHumanHandler != null) new Thread(new ClientMessageListener(blackHumanHandler)).start();
 
-            // Send initial game information to clients.
             startGameSequence();
-
-            // The main loop that processes turns until the game is over.
             mainGameLoop();
-
         } catch (InterruptedException e) {
-            // This can happen if the queue.take() operation is interrupted.
-            Thread.currentThread().interrupt(); // Preserve the interrupted status.
-            System.err.println("GameHandler was interrupted.");
+            Thread.currentThread().interrupt();
             endGame("Game interrupted by a server error.", "*");
         } finally {
-            // This block ALWAYS runs when the run() method exits.
-            // It's crucial for cleanup.
-            if (gameTimer != null) {
-                gameTimer.cancel();
-            }
-            // Signal the ClientHandler threads that the game is over, so they can
-            // terminate gracefully and close their sockets.
-            whitePlayer.signalGameFinished();
-            blackPlayer.signalGameFinished();
-            System.out.println("Game between " + whitePlayer.getUsername() + " and " + blackPlayer.getUsername() + " has concluded.");
+            if (gameTimer != null) gameTimer.cancel();
+
+            // Signal all human players that the game is over.
+            if (whiteHumanHandler != null) whiteHumanHandler.signalGameFinished();
+            if (blackHumanHandler != null) blackHumanHandler.signalGameFinished();
+
+            System.out.println("Game concluded: " + whitePlayerName + " vs " + blackPlayerName);
         }
     }
 
-    /**
-     * Informs clients about their opponent, color, and starts the game timers.
-     */
     private void startGameSequence() {
-        whitePlayer.sendMessage("ASSIGN_COLOR WHITE");
-        blackPlayer.sendMessage("ASSIGN_COLOR BLACK");
+        if (whiteHumanHandler != null) whiteHumanHandler.sendMessage("ASSIGN_COLOR WHITE");
+        if (blackHumanHandler != null) blackHumanHandler.sendMessage("ASSIGN_COLOR BLACK");
 
-        whitePlayer.sendMessage("OPPONENT_NAME " + blackPlayer.getUsername());
-        blackPlayer.sendMessage("OPPONENT_NAME " + whitePlayer.getUsername());
+        if (whiteHumanHandler != null) whiteHumanHandler.sendMessage("OPPONENT_NAME " + blackPlayerName);
+        if (blackHumanHandler != null) blackHumanHandler.sendMessage("OPPONENT_NAME " + whitePlayerName);
 
-        // Send the initial time state.
         broadcastMessage("GAME_START " + whiteClock.getTime() + " " + blackClock.getTime());
-
         startServerTimer();
     }
 
@@ -137,19 +153,43 @@ public class GameHandler implements Runnable {
                 return; // Exit the loop since the game is over.
             }
 
-            ClientHandler activePlayer;
-            ClientHandler opponent;
+            boolean isWhiteTurn = board.getTurn() == Colour.WHITE;
 
-            if (board.getTurn() == Colour.WHITE) {
-                activePlayer = whitePlayer;
-                opponent = blackPlayer;
+            // Determine if the current turn belongs to a bot.
+            boolean isBotTurn = (isWhiteTurn && botPlayer != null && botPlayer.getColor() == Colour.WHITE) ||
+                    (!isWhiteTurn && botPlayer != null && botPlayer.getColor() == Colour.BLACK);
+
+            if (isBotTurn) {
+                // If it's the bot's turn, tell it to make a move.
+                botPlayer.makeMove();
+                // The bot move will be submitted via submitBotMove, so we just wait for it.
+                // We need to process the move before the loop continues.
+                // For simplicity, we assume the bot move processing is quick and happens
+                // before the next iteration of the game loop. A more complex system might
+                // use another latch here, but this should work.
             } else {
-                activePlayer = blackPlayer;
-                opponent = whitePlayer;
+                // If it's a human's turn, wait for their message.
+                ClientHandler activeHuman = isWhiteTurn ? whiteHumanHandler : blackHumanHandler;
+                handlePlayerTurn(activeHuman);
             }
+        }
+    }
 
-            // This method will block until a valid move is received from the active player.
-            handlePlayerTurn(activePlayer, opponent);
+    /** This is called by the BotPlayer to submit its move. */
+    public synchronized void submitBotMove(String moveCommand) {
+        // This runs on the Bot's thread, so we make it synchronized to be safe.
+        String[] parts = moveCommand.split(" ");
+        Square start = Square.fromAlgebraic(parts[1]);
+        Square end = Square.fromAlgebraic(parts[2]);
+        Optional<String> promo = (parts.length > 3) ? Optional.of(parts[3]) : Optional.empty();
+
+        if (board.isLegalMove(start, end)) {
+            String san = board.applyMove(start, end, promo);
+            moveHistory.add(san);
+            broadcastMessage("VALID_MOVE " + san);
+        } else {
+            System.err.println("CRITICAL: Bot attempted an illegal move: " + moveCommand);
+            // In a real system, you might force the bot to try again or forfeit.
         }
     }
 
@@ -157,7 +197,7 @@ public class GameHandler implements Runnable {
      * Handles all logic for a single player's turn, including processing commands
      * from the message queue until a valid move is made.
      */
-    private void handlePlayerTurn(ClientHandler activePlayer, ClientHandler opponent) throws InterruptedException {
+    private void handlePlayerTurn(ClientHandler activeHuman) throws InterruptedException {
         if (board.getTurn() == Colour.WHITE) {
             whiteClock.start();
             blackClock.stop();
@@ -165,23 +205,31 @@ public class GameHandler implements Runnable {
             blackClock.start();
             whiteClock.stop();
         }
-        activePlayer.sendMessage("YOUR_TURN");
-        opponent.sendMessage("OPPONENT_TURN");
+        activeHuman.sendMessage("YOUR_TURN");
+        // Tell the other player(s) it's the opponent's turn
+        if (botPlayer == null) { // H-vs-H game
+            ClientHandler opponent = (activeHuman == whiteHumanHandler) ? blackHumanHandler : whiteHumanHandler;
+            opponent.sendMessage("OPPONENT_TURN");
+        } // In H-vs-Bot, there's no other human to notify.
 
         // Loop indefinitely until a valid MOVE command is processed or a player disconnects.
         while (true) {
             PlayerMessage playerMessage = messageQueue.take(); // This blocks until a message arrives.
+            if (playerMessage.player() != activeHuman) {
+                playerMessage.player().sendMessage("ERROR Not_your_turn");
+                continue;
+            }
             String message = playerMessage.message();
 
             // Handle a player disconnecting during their turn.
             if (message.equals("PLAYER_DISCONNECTED")) {
-                String winner = (playerMessage.player() == whitePlayer) ? "Black" : "White";
+                String winner = (playerMessage.player() == whiteHumanHandler) ? "Black" : "White";
                 endGame(playerMessage.player().getUsername() + " disconnected. " + winner + " wins.", winner.equals("White") ? "1-0" : "0-1");
                 return;
             }
 
             // Ignore messages from the player whose turn it isn't.
-            if (playerMessage.player() != activePlayer) {
+            if (playerMessage.player() != activeHuman) {
                 playerMessage.player().sendMessage("ERROR Not_your_turn");
                 continue;
             }
@@ -191,7 +239,7 @@ public class GameHandler implements Runnable {
 
             if ("MOVE".equals(command)) {
                 if (parts.length < 3) {
-                    activePlayer.sendMessage("INVALID_MOVE Malformed_move_command");
+                    activeHuman.sendMessage("INVALID_MOVE Malformed_move_command");
                     continue;
                 }
                 Square start = Square.fromAlgebraic(parts[1]);
@@ -204,14 +252,14 @@ public class GameHandler implements Runnable {
                     broadcastMessage("VALID_MOVE " + san);
                     break; // Valid move received, exit the loop to end the turn.
                 } else {
-                    activePlayer.sendMessage("INVALID_MOVE Move_is_not_legal");
+                    activeHuman.sendMessage("INVALID_MOVE Move_is_not_legal");
                 }
             } else if ("GET_LEGAL_MOVES".equals(command)) {
                 if (parts.length < 2) continue;
                 Square start = Square.fromAlgebraic(parts[1]);
                 List<Square> legalMoves = board.getLegalMovesForPiece(start);
                 String movesString = legalMoves.stream().map(Square::toString).collect(Collectors.joining(" "));
-                activePlayer.sendMessage("LEGAL_MOVES " + movesString);
+                activeHuman.sendMessage("LEGAL_MOVES " + movesString);
             }
         }
     }
@@ -257,12 +305,11 @@ public class GameHandler implements Runnable {
     }
 
     private void sendPgnToClients(String result) {
-        String pgn = PGNGenerator.generate(whitePlayer.getUsername(), blackPlayer.getUsername(), result, moveHistory);
-        String gameDate = java.time.format.DateTimeFormatter.ofPattern("yyyy.MM.dd").format(java.time.LocalDate.now());
+        String pgn = PGNGenerator.generate(this.whitePlayerName, this.blackPlayerName, result, moveHistory);
+        String gameDate = java.time.format.DateTimeFormatter
+                .ofPattern("yyyy.MM.dd").format(java.time.LocalDate.now());
 
-        // This assumes you have a static saveGame method in DatabaseManager.
-        // If DatabaseManager is not static, you'll need an instance.
-        DatabaseManager.saveGame(whitePlayer.getUsername(), blackPlayer.getUsername(), result, pgn, gameDate);
+        DatabaseManager.saveGame(this.whitePlayerName, this.blackPlayerName, result, pgn, gameDate);
 
         String pgnForTransport = pgn.replace("\n", "|");
         broadcastMessage("GAME_PGN:::" + pgnForTransport);
@@ -274,9 +321,8 @@ public class GameHandler implements Runnable {
     }
 
     private void broadcastMessage(String message) {
-        whitePlayer.sendMessage(message);
-        blackPlayer.sendMessage(message);
-    }
+        if (whiteHumanHandler != null) whiteHumanHandler.sendMessage(message);
+        if (blackHumanHandler != null) blackHumanHandler.sendMessage(message);    }
 
     /**
      * An inner class that runs on its own thread. Its sole purpose is to listen

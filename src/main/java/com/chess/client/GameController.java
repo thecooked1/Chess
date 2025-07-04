@@ -55,6 +55,7 @@ public class GameController {
 
     private void initListeners() {
         view.addReadyListener(e -> handleReadyButton());
+        view.addPlayBotListener(e -> handlePlayBotButton());
         this.view.addQuitListener(e -> System.exit(0));
         this.view.getNewGameMenuItem().setEnabled(false);
         this.view.getLoadPgnMenuItem().setEnabled(false);
@@ -169,8 +170,17 @@ public class GameController {
         view.updatePlayerInfo(names);
     }
 
+    private void handlePlayBotButton() {
+        // Send a new, specific command to the server.
+        networkHandler.sendMessage("PLAY_BOT");
+        view.getReadyButton().setEnabled(false);
+        view.getPlayBotButton().setEnabled(false); // Disable both buttons
+        view.setStatus("Requesting a game against the bot...");
+    }
+
     private void handleGameStart(String payload) {
         view.getReadyButton().setVisible(false);
+        view.getPlayBotButton().setVisible(false);
         view.setStatus("Game started!");
         handleUpdateTime(payload);
 
@@ -239,6 +249,7 @@ public class GameController {
     private void handleReadyButton() {
         networkHandler.sendMessage("PLAYER_READY");
         view.getReadyButton().setEnabled(false);
+        view.getPlayBotButton().setEnabled(false);
         view.setStatus("Ready signal sent. Waiting for match...");
     }
 
