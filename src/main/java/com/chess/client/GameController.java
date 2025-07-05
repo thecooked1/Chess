@@ -155,6 +155,7 @@ public class GameController {
     private void handleAssignColor(String payload) {
         this.myColor = Colour.valueOf(payload);
         view.setTitle("Chess Client - Playing as " + payload);
+        view.getChessBoardPanel().updateBoard(this.displayBoard, this.myColor);
     }
 
     private void handleOpponentName(String payload) {
@@ -193,7 +194,7 @@ public class GameController {
 
     private void handleUpdateState(String payload) {
         this.displayBoard.updateFromFen(payload);
-        view.getChessBoardPanel().updateBoard(this.displayBoard);
+        view.getChessBoardPanel().updateBoard(this.displayBoard, this.myColor);
     }
 
     private void handleYourTurn() {

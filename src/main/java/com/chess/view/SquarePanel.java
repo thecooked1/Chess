@@ -80,4 +80,8 @@ public class SquarePanel extends JPanel {
             }
         }
     }
+
+    public int getRank() { return rank; }
+    public int getFile() { return file; }
+
 }
