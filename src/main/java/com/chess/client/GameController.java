@@ -11,6 +11,7 @@ import com.chess.model.Board.*;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -88,7 +89,6 @@ public class GameController {
                 case "YOUR_TURN" -> handleYourTurn();
                 case "OPPONENT_TURN" -> handleOpponentTurn();
                 case "GAME_OVER" -> handleGameOver(payload);
-                case "LEGAL_MOVES" -> handleLegalMoves(payload);
                 case "WAITING_FOR_OPPONENT" -> view.setStatus("Waiting for opponent to be ready...");
                 case "VALID_MOVE" -> handleValidMove(payload);
                 case "INVALID_MOVE" -> {
@@ -100,22 +100,27 @@ public class GameController {
         });
     }
 
-    // In main/client/GameController.java
+    private void handleValidMove(String payload) {
+        // Expected payload format: "e2 e4 e4" (from, to, SAN)
+        String[] moveParts = payload.split(" ");
+        if (moveParts.length < 3) return;
 
-    private void handleValidMove(String san) {
-        // A move was validated by the server. Add it to our GUI log.
-        if (san != null && !san.isEmpty()) {
+        Square from = Square.fromAlgebraic(moveParts[0]);
+        Square to = Square.fromAlgebraic(moveParts[1]);
+        String san = moveParts[2];
+
+        // Update the view with the last move info
+        view.getChessBoardPanel().setLastMove(from, to);
+
+        if (!san.isEmpty()) {
             view.addMoveToLog(moveNumber, san, currentTurnForLog);
-
-            // If it was Black's move, increment the move number for the next pair.
             if (currentTurnForLog == Colour.BLACK) {
                 moveNumber++;
             }
-
-            // Toggle the turn for the next log entry.
             currentTurnForLog = (currentTurnForLog == Colour.WHITE) ? Colour.BLACK : Colour.WHITE;
         }
     }
+
 
     private void handleUpdateTime(String payload) {
         String[] times = payload.split(" ");
@@ -213,16 +218,19 @@ public class GameController {
 
     private void handleGameOver(String payload) {
         isMyTurn = false;
-        view.setStatus("Game Over. PGN data is being sent.");
-        view.showGameOverDialog(payload, "Game Over");
-    }
+        isGameActive = false; // Game is no longer active
 
-    private void handleLegalMoves(String payload) {
-        view.getChessBoardPanel().clearHighlights();
-        if (!payload.isEmpty()) {
-            Set<Square> legalSquares = Arrays.stream(payload.split(" ")).map(Square::fromAlgebraic).collect(Collectors.toSet());
-            view.getChessBoardPanel().highlightLegalMoves(legalSquares);
+        String[] parts = payload.split(" ", 2);
+        String reason = parts[0];
+        String message = parts.length > 1 ? parts[1].replace("_", " ") : "Game Over";
+
+        // Check for checkmate to set a special highlight
+        if ("CHECKMATE".equalsIgnoreCase(reason)) {
+            view.getChessBoardPanel().setCheckmate(true);
         }
+
+        view.setStatus("Game Over. PGN data is being sent.");
+        view.showGameOverDialog(message, "Game Over");
     }
 
     // ... other methods (handleSavePgn, BoardMouseListener, etc.) are unchanged ...
@@ -276,50 +284,73 @@ public class GameController {
     }
 
     private class BoardMouseListener extends MouseAdapter {
+        private Point pressPoint; // To distinguish a click from a drag
+
         @Override
         public void mousePressed(MouseEvent e) {
+            if (!isGameActive || !isMyTurn) return;
+            pressPoint = e.getPoint(); // Record where the mouse was pressed
 
-            if (!isGameActive) return;
-
-            if (!isMyTurn) return;
             Square clickedSquare = view.getChessBoardPanel().getSquareFromPoint(e.getPoint());
             if (clickedSquare == null) return;
-            view.getChessBoardPanel().clearHighlights();
-            Piece clickedPiece = displayBoard.getPiece(clickedSquare);
-            if (clickedPiece != null && clickedPiece.getColor() == myColor) {
-                selectedSquare = clickedSquare;
-                view.getChessBoardPanel().selectSquare(selectedSquare);
-                view.getChessBoardPanel().setDraggedPiece(clickedPiece, e.getPoint());
+
+            // If a square is already selected (this is the second click)
+            if (selectedSquare != null) {
+                // Check if the second click is on a legal move square
                 Set<Square> legalMoves = new HashSet<>(displayBoard.getLegalMovesForPiece(selectedSquare));
-                view.getChessBoardPanel().highlightLegalMoves(legalMoves);
+                if (legalMoves.contains(clickedSquare)) {
+                    attemptUserMove(selectedSquare, clickedSquare); // Make the move
+                }
+                // Whether the move was legal or not, clear the selection.
+                clearSelectionAndHighlights();
+            } else { // This is the first click
+                Piece clickedPiece = displayBoard.getPiece(clickedSquare);
+                if (clickedPiece != null && clickedPiece.getColor() == myColor) {
+                    selectedSquare = clickedSquare;
+                    view.getChessBoardPanel().selectSquare(selectedSquare);
+
+                    // Show legal moves
+                    Set<Square> legalMoves = new HashSet<>(displayBoard.getLegalMovesForPiece(selectedSquare));
+                    view.getChessBoardPanel().highlightLegalMoves(legalMoves, displayBoard);
+                }
             }
         }
 
         @Override
         public void mouseReleased(MouseEvent e) {
-
-            if (!isGameActive) return;
-
-            view.getChessBoardPanel().clearHighlights();
-            if (selectedSquare == null || !isMyTurn) return;
-            Square releaseSquare = view.getChessBoardPanel().getSquareFromPoint(e.getPoint());
-            view.getChessBoardPanel().clearDraggedPiece();
-            view.getChessBoardPanel().clearSelection();
-            Set<Square> legalMoves = new HashSet<>(displayBoard.getLegalMovesForPiece(selectedSquare));
-            if (releaseSquare != null && legalMoves.contains(releaseSquare)) {
-                attemptUserMove(selectedSquare, releaseSquare);
+            if (!isGameActive || !isMyTurn || selectedSquare == null) {
+                view.getChessBoardPanel().clearDraggedPiece();
+                return;
             }
-            selectedSquare = null;
+
+            // This handles the "drag and drop" case
+            // If the mouse moved significantly, it's a drag, not a click.
+            if (pressPoint != null && pressPoint.distance(e.getPoint()) > 5) {
+                Square releaseSquare = view.getChessBoardPanel().getSquareFromPoint(e.getPoint());
+                Set<Square> legalMoves = new HashSet<>(displayBoard.getLegalMovesForPiece(selectedSquare));
+
+                if (releaseSquare != null && legalMoves.contains(releaseSquare)) {
+                    attemptUserMove(selectedSquare, releaseSquare);
+                }
+                clearSelectionAndHighlights();
+            }
+            view.getChessBoardPanel().clearDraggedPiece();
         }
 
         @Override
         public void mouseDragged(MouseEvent e) {
-
-            if (!isGameActive) return;
-
-            if (selectedSquare != null) {
+            if (!isGameActive || !isMyTurn || selectedSquare == null) return;
+            // Only start showing the dragged piece if the mouse has moved a bit
+            if (pressPoint != null && pressPoint.distance(e.getPoint()) > 5) {
                 view.getChessBoardPanel().setDraggedPiece(displayBoard.getPiece(selectedSquare), e.getPoint());
             }
         }
+    }
+
+    // Add a helper method to centralize clearing state
+    private void clearSelectionAndHighlights() {
+        selectedSquare = null;
+        view.getChessBoardPanel().clearSelection();
+        view.getChessBoardPanel().clearHighlights();
     }
 }

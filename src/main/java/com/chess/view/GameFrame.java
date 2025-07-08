@@ -111,6 +111,7 @@ public class GameFrame extends JFrame {
         pack();
         setMinimumSize(getPreferredSize());
         setLocationRelativeTo(null);
+        setVisible(true);
     }
 
     // --- MOVE LOG: New method to add a move to the log ---
@@ -140,9 +141,32 @@ public class GameFrame extends JFrame {
     public JMenuItem getSavePgnMenuItem() { return savePgnMenuItem; }
     public void addSavePgnListener(ActionListener listener) { savePgnMenuItem.addActionListener(listener); }
     public void setStatus(String text) { statusLabel.setText(text); }
-    public void updatePlayerInfo(Map<String, String> headers) { whitePlayerLabel.setText("White: " + headers.getOrDefault("White", "Unknown")); blackPlayerLabel.setText("Black: " + headers.getOrDefault("Black", "Unknown")); }
-    public void updateClock(Colour colour, String time) { if (colour == Colour.WHITE) { whiteClockLabel.setText("Time: " + time); } else { blackClockLabel.setText("Time: " + time); } }
+    public void updatePlayerInfo(Map<String, String> headers) {
+        whitePlayerLabel.setText("White: " + headers.getOrDefault("White", "Unknown"));
+        blackPlayerLabel.setText("Black: " + headers.getOrDefault("Black", "Unknown"));
+    }
+    public void updateClock(Colour colour, String time) {
+        if (colour == Colour.WHITE) {
+            whiteClockLabel.setText("Time: " + time);
+        } else { blackClockLabel.setText("Time: " + time); } }
     public void addQuitListener(ActionListener listener) { quitButton.addActionListener(listener); }
-    public void showGameOverDialog(String message, String title) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.INFORMATION_MESSAGE); }
-    public String askPromotionChoice() { Piece[] promotionPieces = { new Queen(Colour.WHITE), new Rook(Colour.WHITE), new Bishop(Colour.WHITE), new Knight(Colour.WHITE) }; ImageIcon[] icons = new ImageIcon[promotionPieces.length]; for (int i = 0; i < promotionPieces.length; i++) { Image img = PieceImageLoader.getImage(promotionPieces[i]); if (img != null) { icons[i] = new ImageIcon(img.getScaledInstance(40, 40, Image.SCALE_SMOOTH)); } } int choice = JOptionPane.showOptionDialog(this, "Choose piece for promotion:", "Pawn Promotion", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, icons, icons[0]); if (choice >= 0 && choice < promotionPieces.length) { return String.valueOf(promotionPieces[choice].getSymbol()).toUpperCase(); } return "Q"; }
+    public void showGameOverDialog(String message, String title) {
+        JOptionPane.showMessageDialog(this, message, title, JOptionPane.INFORMATION_MESSAGE);
+    }
+    public String askPromotionChoice() { Piece[] promotionPieces = {
+            new Queen(Colour.WHITE), new Rook(Colour.WHITE), new Bishop(Colour.WHITE), new Knight(Colour.WHITE)
+    };
+        ImageIcon[] icons = new ImageIcon[promotionPieces.length];
+        for (int i = 0; i < promotionPieces.length; i++) {
+            Image img = PieceImageLoader.getImage(promotionPieces[i]);
+            if (img != null) {
+                icons[i] = new ImageIcon(img.getScaledInstance(40, 40, Image.SCALE_SMOOTH));
+            }
+        }
+        int choice = JOptionPane.showOptionDialog(this, "Choose piece for promotion:", "Pawn Promotion",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, icons, icons[0]);
+        if (choice >= 0 && choice < promotionPieces.length) {
+            return String.valueOf(promotionPieces[choice].getSymbol()).toUpperCase();
+        } return "Q";
+    }
 }

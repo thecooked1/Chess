@@ -256,7 +256,7 @@ public class GameHandler implements Runnable {
                 if (board.isLegalMove(start, end)) {
                     String san = board.applyMove(start, end, promo);
                     moveHistory.add(san);
-                    broadcastMessage("VALID_MOVE " + san);
+                    broadcastMessage("VALID_MOVE " + start + " " + end + " " + san);
                     break; // Valid move received, exit the loop to end the turn.
                 } else {
                     activeHuman.sendMessage("INVALID_MOVE Move_is_not_legal");
@@ -277,11 +277,17 @@ public class GameHandler implements Runnable {
      */
     private synchronized void endGame(String message, String result) {
         if (isGameOver) return; // Prevent this from being called multiple times.
-
         this.isGameOver = true;
 
+        String reason = "OTHER";
+        if (message.startsWith("Checkmate")) {
+            reason = "CHECKMATE";
+        } else if (message.startsWith("Stalemate")) {
+            reason = "STALEMATE";
+        }
+
         sendPgnToClients(result);
-        broadcastMessage("GAME_OVER " + message.replace(" ", "_"));
+        broadcastMessage("GAME_OVER " + reason + " " + message.replace(" ", "_"));
     }
 
     /**
