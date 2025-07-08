@@ -12,6 +12,13 @@ public class King extends Piece {
     }
 
     @Override
+    public Piece copy() {
+        King newKing = new King(this.getColor());
+        newKing.setMoved(this.hasMoved());
+        return newKing;
+    }
+
+    @Override
     public boolean isValidMove(Square from, Square to, Board board) {
         int rankDiff = Math.abs(from.rank() - to.rank());
         int fileDiff = Math.abs(from.file() - to.file());

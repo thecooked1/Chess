@@ -12,6 +12,13 @@ public class Bishop extends Piece {
     }
 
     @Override
+    public Piece copy() {
+        Bishop newBishop = new Bishop(this.getColor());
+        newBishop.setMoved(this.hasMoved());
+        return newBishop;
+    }
+
+    @Override
     public boolean isValidMove(Square from, Square to, Board board) {
         // Bishops move diagonally
         if (Math.abs(from.rank() - to.rank()) != Math.abs(from.file() - to.file())) {

@@ -12,6 +12,13 @@ public class Rook extends Piece {
     }
 
     @Override
+    public Piece copy() {
+        Rook newRook = new Rook(this.getColor());
+        newRook.setMoved(this.hasMoved());
+        return newRook;
+    }
+
+    @Override
     public boolean isValidMove(Square from, Square to, Board board) {
         // Rooks move in straight lines
         if (from.rank() != to.rank() && from.file() != to.file()) {

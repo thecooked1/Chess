@@ -8,7 +8,7 @@ public class Pawn extends Piece {
 
     public Pawn(Colour colour) {
         super(colour);
-        this.symbol = 'P';
+        this.symbol = (colour == Colour.WHITE) ? 'P' : 'p';
     }
 
     @Override
@@ -28,34 +28,31 @@ public class Pawn extends Piece {
 
         // --- Case 2: Double-square forward move from starting rank ---
         if (from.rank() == startRank && fileDiff == 0 && rankDiff == 2 * direction && targetPiece == null) {
-            // Check that the square being jumped over is also empty
-            Square jumpedSquare = new Square(from.rank() + direction, from.file());
-            if (board.getPiece(jumpedSquare) == null) {
-                return true;
-            }
+            return board.getPiece(new Square(from.rank() + direction, from.file())) == null;
         }
 
         // --- Case 3: Standard diagonal capture ---
-        if (Math.abs(fileDiff) == 1 && rankDiff == direction && targetPiece != null) {
-            return targetPiece.getColor() != this.colour;
+        if (Math.abs(fileDiff) == 1 && rankDiff == direction && targetPiece != null && targetPiece.getColor() != this.colour) {
+            return true;
         }
 
         // --- Case 4: En Passant capture ---
-        Square enPassantTarget = board.getEnPassantTargetSquare();
-        if (enPassantTarget != null && to.equals(enPassantTarget)) {
-            // Verify it's a diagonal move to the en passant square
-            if (Math.abs(fileDiff) == 1 && rankDiff == direction) {
-                // The target square must be empty for an en passant capture
-                return targetPiece == null;
-            }
+        if (Math.abs(fileDiff) == 1 && rankDiff == direction && to.equals(board.getEnPassantTargetSquare())) {
+            return true;
         }
 
-        // the move is invalid.
         return false;
     }
 
     @Override
+    public Piece copy() {
+        Pawn newPawn = new Pawn(this.getColor());
+        newPawn.setMoved(this.hasMoved());
+        return newPawn;
+    }
+
+    @Override
     public char getSymbol() {
-        return symbol;
+        return this.symbol;
     }
 }

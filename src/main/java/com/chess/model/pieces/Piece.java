@@ -5,7 +5,7 @@ import com.chess.common.Square;
 
 
 public abstract class Piece {
-    protected Colour colour;
+    protected final Colour colour;
     protected char symbol;
     protected boolean hasMoved = false;
 
@@ -25,10 +25,10 @@ public abstract class Piece {
          this.hasMoved = hasMoved;
     }
 
-
+    public abstract Piece copy();
 
     public abstract boolean isValidMove(Square from, Square to, Board board);
-    public abstract char getSymbol();
+    public char getSymbol() { return symbol; }
 
     @Override
     public String toString() {

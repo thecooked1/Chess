@@ -1,4 +1,3 @@
-// main/model/Board/Board.java
 package com.chess.model.Board;
 
 import com.chess.common.Colour;
@@ -12,7 +11,6 @@ import java.util.List;
 import java.util.Optional;
 
 public class Board {
-    // ... fields are unchanged ...
     private final Piece[][] grid;
     private Colour turn;
     private Square enPassantTargetSquare;
@@ -244,21 +242,12 @@ public class Board {
         return legalMoves;
     }
 
-    // In main/model/Board/Board.java
-
-    // In main/model/Board/Board.java
-
     public boolean isLegalMove(Square start, Square end) {
         Piece piece = getPiece(start);
         // Basic sanity checks
         if (piece == null || piece.getColor() != turn) return false;
         if (start.equals(end)) return false;
 
-        // --- RESTRUCTURED AND CORRECTED LOGIC ---
-
-        // Step 1: Handle special moves first. Is this a castling attempt?
-        // --- THIS IS THE CRITICAL FIX ---
-        // A castle is ONLY a two-square horizontal move on the same rank.
         boolean isCastleAttempt = piece instanceof King &&
                 Math.abs(start.file() - end.file()) == 2 &&
                 start.rank() == end.rank();
@@ -572,16 +561,8 @@ public class Board {
     }
 
     public void updateFromFen(String fen) {
-        // Clear the current grid
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                this.grid[r][c] = null;
-            }
-        }
-
-        // Reset state
+        for (int r = 0; r < 8; r++) for (int c = 0; c < 8; c++) this.grid[r][c] = null;
         this.enPassantTargetSquare = null;
-        // A full implementation would reset castling rights here too
 
         String[] parts = fen.split(" ");
         String piecePlacement = parts[0];
@@ -606,7 +587,7 @@ public class Board {
                         case 'p' -> new Pawn(color);
                         default -> null;
                     };
-                    this.grid[r][c] = piece;
+                    setPiece(new Square(r,c), piece);
                     c++;
                 }
             }
@@ -614,13 +595,19 @@ public class Board {
 
         // Part 2: Active Color
         if (parts.length > 1) {
-            this.turn = parts[1].equals("w") ? Colour.WHITE : Colour.WHITE;
+            this.turn = parts[1].equals("b") ? Colour.BLACK : Colour.WHITE;
         }
 
-        // Part 3: Castling Rights (ignored for now)
+        // Part 3: Castling Rights
+        if (parts.length > 2) {
+            String castlingStr = parts[2];
+            whiteKingsideCastleRight = castlingStr.contains("K");
+            whiteQueensideCastleRight = castlingStr.contains("Q");
+            blackKingsideCastleRight = castlingStr.contains("k");
+            blackQueensideCastleRight = castlingStr.contains("q");
+        }
 
         // Part 4: En Passant Target Square
-        // --- THIS IS THE CRITICAL FIX ---
         if (parts.length > 3 && !parts[3].equals("-")) {
             this.enPassantTargetSquare = Square.fromAlgebraic(parts[3]);
         }

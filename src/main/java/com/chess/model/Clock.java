@@ -1,4 +1,3 @@
-// main/model/Clock.java
 package com.chess.model;
 
 public class Clock {

@@ -10,6 +10,12 @@ public class Queen extends Piece {
         super(colour);
         this.symbol = 'Q';
     }
+    @Override
+    public Piece copy() {
+        Queen newQueen = new Queen(this.getColor());
+        newQueen.setMoved(this.hasMoved());
+        return newQueen;
+    }
 
     @Override
     public boolean isValidMove(Square from, Square to, Board board) {

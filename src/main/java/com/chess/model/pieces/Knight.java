@@ -12,6 +12,13 @@ public class Knight extends Piece {
     }
 
     @Override
+    public Piece copy() {
+        Knight newKnight = new Knight(this.getColor());
+        newKnight.setMoved(this.hasMoved());
+        return newKnight;
+    }
+
+    @Override
     public boolean isValidMove(Square from, Square to, Board board) {
         int rankDiff = Math.abs(from.rank() - to.rank());
         int fileDiff = Math.abs(from.file() - to.file());
